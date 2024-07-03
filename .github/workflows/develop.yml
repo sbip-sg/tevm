@@ -1,0 +1,87 @@
+name: Test on PR
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+
+env:
+  CARGO_TERM_COLOR: always
+  SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+
+jobs:
+  Test:
+
+    runs-on: ubuntu
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
+
+    - uses: actions-rs/toolchain@v1             # Rust toolchain
+      with:
+        components: rustfmt, clippy
+
+    - name: Get OS infomration
+      id: os
+      run: echo "KERNEL=$(uname -r)" >> $GITHUB_OUTPUT
+
+    - uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-${{steps.os.outputs.KERNEL}}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+        architecture: x64
+
+    - uses: taiki-e/install-action@cargo-llvm-cov
+    - uses: taiki-e/install-action@nextest
+
+    - name: Install Python dependencies
+      run: pip install -r requirements-dev.txt
+
+    - uses: webfactory/ssh-agent@v0.5.4
+      with:
+        ssh-private-key: |
+          ${{ secrets.SSH_PRIVATE_KEY_RUST_EVM }}
+          ${{ secrets.SSH_PRIVATE_KEY_REVM }}
+
+    - name: Check code formatting
+      run: cargo +stable fmt
+
+    - name: Check code linting
+      run: cargo clippy --tests --benches --features linting
+
+    - name: Check documentation linting
+      run: cargo doc --no-deps --features linting
+
+    - name: Run Rust tests
+      run: cargo nextest run
+
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: llvm-tools-preview
+
+    - name: Install as local Python package
+      uses: PyO3/maturin-action@v1
+      with:
+        target: x86_64
+        args: --release
+
+    - name: Install built wheel and run Python tests
+      run: |
+        pip install target/wheels/*.whl --force-reinstall
+        pytest
