@@ -3,6 +3,11 @@ name = "tevm"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name="tinyevm"
+crate_type = ["cdylib", "rlib"]
+path="src/lib.rs"
+
 [dependencies]
 eyre = { version = "0.6.12" }
 hex = "0.4.3"
@@ -11,8 +16,8 @@ libc = "0.2.155"
 maplit = "1.0.2"
 num-bigint = "0.4.6"
 primitive-types = "0.12.2"
-pyo3 = "0.22.0"
-revm = { version = "10.0.0", features = ["hashbrown", "optional_no_base_fee", "serde", "serde-json"] }
+pyo3 = { version = "0.22.0", features = ["extension-module", "num-bigint", "serde", "eyre"] }
+revm = { version = "10.0.0", features = ["hashbrown", "optional_no_base_fee", "serde", "serde-json", "optional_eip3607", "optional_block_gas_limit"] }
 ruint = "1.12.3"
 serde = { version = "1.0.203", features = ["serde_derive", "derive"] }
 serde_json = "1.0.120"
@@ -26,6 +31,11 @@ ethers-contract = { git = "https://github.com/gakonst/ethers-rs", default-featur
 ethers-providers = { git = "https://github.com/gakonst/ethers-rs" }
 ethers-middleware = { git = "https://github.com/gakonst/ethers-rs", default-features = false }
 dotenv = "0.15.0"
+thread_local = "1.1.8"
+tokio = { version = "1.38.0", features = ["full"] }
+strum_macros = "0.26.4"
+hashbrown = "*"
+redis = "0.25.4"
 
 [dev-dependencies]
 criterion = {version="0.3.6", features=["html_reports"] }
