@@ -3,7 +3,7 @@ use hashbrown::{HashMap, HashSet};
 use hex::ToHex;
 use num_bigint::BigInt;
 use pyo3::{exceptions::PyValueError, prelude::*};
-use revm::primitives::{Address, EVMResult, ExecutionResult};
+use revm::primitives::{Address, ExecutionResult, Output};
 use ruint::aliases::U256;
 use std::{
     fmt::{Display, Formatter},
@@ -23,7 +23,7 @@ use primitive_types::H160;
 /// Response from REVM executor
 pub struct RevmResult {
     /// Tx result
-    pub result: EVMResult<eyre::Error>,
+    pub result: Result<ExecutionResult, eyre::Error>,
     /// Bug data
     pub bug_data: BugData,
     /// Heuristics data
@@ -381,7 +381,7 @@ impl From<RevmResult> for Response {
             };
         }
 
-        let result = result.unwrap().result;
+        let result = result.unwrap();
         let success = result.is_success();
 
         let gas_usage = result.gas_used();
@@ -392,9 +392,14 @@ impl From<RevmResult> for Response {
             ExecutionResult::Halt { reason, .. } => format!("{:?}", reason),
         };
 
-        let data = match result.output() {
-            Some(bytes) => bytes.to_vec(),
-            None => Vec::new(),
+        let data = match result {
+            ExecutionResult::Success { output, .. } => match output {
+                Output::Call(data) => data.to_vec(),
+                Output::Create(_data, Some(address)) => address.to_vec(),
+                _ => Vec::new(), // WARN: assuming no such case that creation succeeds but no address is returned
+            },
+            ExecutionResult::Revert { output, .. } => output.to_vec(),
+            _ => Vec::new(),
         };
 
         Self {

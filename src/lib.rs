@@ -114,7 +114,7 @@ pub fn enable_tracing() -> Result<()> {
 
     if unsafe { !TRACE_ENABLED } {
         let subscriber = fmt::Subscriber::builder()
-            .with_env_filter(EnvFilter::from("tinyevm=debug,revm=debug"))
+            .with_env_filter(EnvFilter::from("tinyevm=trace,revm=trace"))
             .finish();
 
         // Set the subscriber as the global default.
@@ -276,14 +276,21 @@ impl TinyEVM {
 
         // todo add the inspector to the exe
 
-        let result = self.exe.as_mut().unwrap().transact();
+        let result = self.exe.as_mut().unwrap().transact_commit();
+
+        // debug!("db {:?}", self.exe.as_ref().unwrap().db());
+        // debug!("sender {:?}", owner.encode_hex::<String>(),);
+
+        // todo_cl temp check
+        self.db = self.exe.as_ref().unwrap().db().clone();
+        self.env = self.exe.as_ref().unwrap().context.evm.env.as_ref().clone();
 
         trace!("deploy result: {:?}", result);
 
         let collision = {
             if let Ok(ref result) = result {
                 matches!(
-                    result.result,
+                    result,
                     ExecutionResult::Halt {
                         reason: HaltReason::CreateCollision,
                         ..
@@ -324,7 +331,7 @@ impl TinyEVM {
         let seen_pcs = self.pcs_by_address().clone();
         let addresses = self.created_addresses().clone();
         info!(
-            "created addresses from deployment: {:?} for {:?}",
+            "created addresses from deployment: {:?} for calculated address {:?}",
             addresses, address
         );
         if !addresses.is_empty() {
@@ -342,7 +349,7 @@ impl TinyEVM {
         trace!("deploy result: {:?}", result);
 
         let revm_result = RevmResult {
-            result,
+            result: result.map_err(|e| eyre!(e)),
             bug_data,
             heuristics,
             seen_pcs,
@@ -350,9 +357,7 @@ impl TinyEVM {
             traces: vec![],
             ignored_addresses: Default::default(),
         };
-        let mut resp: Response = revm_result.into();
-        resp.data = address.0.to_vec();
-        Ok(resp)
+        Ok(revm_result.into())
     }
 
     /// Send a `transact_call` to a `contract` from the `sender` with raw
@@ -371,6 +376,9 @@ impl TinyEVM {
         self.db.instrument_data.heuristics = Heuristics::default();
 
         CALL_DEPTH.get_or_default().set(0);
+
+        debug!("db in contract_call: {:?}", self.exe.as_ref().unwrap().db());
+        debug!("sender {:?}", sender.encode_hex::<String>(),);
 
         if let Some(exe) = self.exe.take() {
             let exe = exe
@@ -399,7 +407,7 @@ impl TinyEVM {
 
         let result = {
             let exe = self.exe.as_mut().unwrap();
-            exe.transact()
+            exe.transact_commit()
         };
 
         let bug_data = self.bug_data().clone();
@@ -427,7 +435,7 @@ impl TinyEVM {
         let ignored_addresses = ignored_addresses.into_iter().map(Into::into).collect();
 
         let revm_result = RevmResult {
-            result,
+            result: result.map_err(|e| eyre!(e)),
             bug_data,
             heuristics,
             seen_pcs,
@@ -698,6 +706,7 @@ impl TinyEVM {
                 U256::default()
             }
         };
+
         let contract_deploy_code = hex::decode(contract_deploy_code)?;
         let data = {
             if let Some(data) = data {
@@ -709,6 +718,7 @@ impl TinyEVM {
         let value = value.unwrap_or_default();
         let mut contract_bytecode = contract_deploy_code.to_vec();
         contract_bytecode.extend(data);
+        // contract_bytecode.extend(&salt.to_be_bytes::<32>().to_vec());
 
         let resp = {
             let resp = self.deploy_helper(

@@ -63,6 +63,8 @@ macro_rules! deploy_hex {
             "Deploying {} should succeed: {:?}",
             bytecode_hex, resp
         );
+
+        println!("Contract deployed to {}", resp.data.encode_hex::<String>());
         let $addr = H160::from_slice(&resp.data);
     };
 }
@@ -114,6 +116,11 @@ fn make_transfer_bin(to: Address, amount: U256) -> Vec<u8> {
 fn test_contract_deploy_transfer_query() {
     let _ = enable_tracing();
     deploy_hex!("../tests/contracts/C.hex", exe, address);
+
+    println!(
+        "Expected contract address {:?}",
+        H160::from(*CONTRACT_ADDRESS.0),
+    );
 
     assert_eq!(
         H160::from(*CONTRACT_ADDRESS.0),
