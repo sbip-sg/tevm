@@ -34,7 +34,7 @@ pub struct InstrumentData {
     pub last_index_eq: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ForkDB<T: ProviderCache> {
     /// Account info where None means it is not existing. Not existing state is needed for Pre TANGERINE forks.
     /// `code` is always `None`, and bytecode can be found in `contracts`.

@@ -112,6 +112,7 @@ fn make_transfer_bin(to: Address, amount: U256) -> Vec<u8> {
 
 #[test]
 fn test_contract_deploy_transfer_query() {
+    let _ = enable_tracing();
     deploy_hex!("../tests/contracts/C.hex", exe, address);
 
     assert_eq!(

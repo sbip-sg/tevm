@@ -394,7 +394,7 @@ impl From<RevmResult> for Response {
 
         let data = match result.output() {
             Some(bytes) => bytes.to_vec(),
-            _ => Vec::new(),
+            None => Vec::new(),
         };
 
         Self {

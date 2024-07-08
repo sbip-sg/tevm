@@ -84,12 +84,8 @@ pub struct TinyEvmContext {}
 /// TinyEVM is a Python wrapper for REVM
 #[pyclass(unsendable)]
 pub struct TinyEVM {
-    // /// REVM instance
-    // exe: Evm<
-    //     'static,
-    //     Context<EvmContext<FileSystemTinyEvmDb>, FileSystemTinyEvmDb>,
-    //     FileSystemTinyEvmDb,
-    // >,
+    /// REVM instance
+    pub exe: Option<Evm<'static, (), ForkDB<FileSystemProviderCache>>>,
     /// Default sender address
     pub db: ForkDB<FileSystemProviderCache>,
     /// EVM env which contains the config for the EVM, the block as well as the transaction
@@ -135,15 +131,6 @@ pub fn enable_tracing() -> Result<()> {
 
 // Implementations for use in Rust
 impl TinyEVM {
-    pub fn exe(&mut self) -> Evm<'_, (), ForkDB<FileSystemProviderCache>> {
-        Evm::builder()
-            .modify_env(|env| {
-                *env = Box::new(self.env.clone());
-            })
-            .with_db(self.db.clone())
-            .build()
-    }
-
     pub fn instrument_data(&self) -> &InstrumentData {
         &self.db.instrument_data
     }
@@ -215,7 +202,7 @@ impl TinyEVM {
 
         if let Some(created_addrs) = addrs {
             for addr in created_addrs.clone() {
-                self.nuke_account(addr.into())?;
+                self.nuke_account(addr)?;
             }
         }
 
@@ -250,16 +237,20 @@ impl TinyEVM {
 
         self.db.instrument_data.pcs_by_address.clear(); // If don't want to trace the deploy PCs
 
-        let exe = Evm::builder()
-            .modify_cfg_env(|env| env.limit_contract_code_size = Some(0x24000))
-            .modify_tx_env(|tx| {
-                tx.caller = owner.into();
-                tx.transact_to = TransactTo::Create;
-                tx.data = contract_bytecode.clone().into();
-                tx.value = value;
-                tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
-            })
-            .build();
+        if let Some(exe) = self.exe.take() {
+            let exe = exe
+                .modify()
+                .modify_tx_env(|tx| {
+                    tx.caller = owner;
+                    tx.transact_to = TransactTo::Create;
+                    tx.data = contract_bytecode.clone().into();
+                    tx.value = value;
+                    tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
+                })
+                .modify_cfg_env(|env| env.limit_contract_code_size = Some(0x24000))
+                .build();
+            self.exe = Some(exe);
+        }
 
         let code_hash = keccak256(&contract_bytecode);
         let address = owner.create2(B256::from(salt), code_hash);
@@ -298,13 +289,13 @@ impl TinyEVM {
 
         let collision = {
             if let Ok(ref result) = result {
-                match result.result {
+                matches!(
+                    result.result,
                     ExecutionResult::Halt {
                         reason: HaltReason::CreateCollision,
                         ..
-                    } => true,
-                    _ => false,
-                }
+                    }
+                )
             } else {
                 false
             }
@@ -349,7 +340,7 @@ impl TinyEVM {
                 .db
                 .instrument_data
                 .managed_addresses
-                .insert(address.into(), addresses);
+                .insert(address, addresses);
         }
 
         trace!("deploy result: {:?}", result);
@@ -385,19 +376,19 @@ impl TinyEVM {
 
         CALL_DEPTH.get_or_default().set(0);
 
-        let mut exe = Evm::builder()
-            .with_db(self.db.clone())
-            .modify_env(|env| {
-                *env = Box::new(self.env.clone());
-            })
-            .modify_tx_env(|tx| {
-                tx.caller = sender;
-                tx.transact_to = TransactTo::Call(contract);
-                tx.data = data.into();
-                tx.value = value;
-                tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
-            })
-            .build();
+        if let Some(exe) = self.exe.take() {
+            let exe = exe
+                .modify()
+                .modify_tx_env(|tx| {
+                    tx.caller = sender;
+                    tx.transact_to = TransactTo::Call(contract);
+                    tx.data = data.into();
+                    tx.value = value;
+                    tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
+                })
+                .build();
+            self.exe = Some(exe);
+        }
 
         let mut traces = vec![];
         let mut logs = vec![];
@@ -410,7 +401,11 @@ impl TinyEVM {
             override_addresses: &mut Default::default(),
         };
 
-        let result = exe.transact();
+        let result = {
+            let exe = self.exe.as_mut().unwrap();
+            exe.transact()
+        };
+
         let bug_data = self.bug_data().clone();
         let heuristics = self.heuristics().clone();
         let seen_pcs = self.pcs_by_address().clone();
@@ -420,7 +415,10 @@ impl TinyEVM {
             addresses, contract
         );
 
+        debug!("contract_call result: {:?}", result);
+
         if !addresses.is_empty() {
+            let exe = self.exe.as_mut().unwrap();
             exe.context
                 .evm
                 .db
@@ -452,7 +450,7 @@ impl TinyEVM {
 
         if let Some(account) = accounts.get(&addr) {
             debug!("Set code for existing account");
-            let code_hash = keccak256(&code.bytecode());
+            let code_hash = keccak256(code.bytecode());
             let code = Some(code);
 
             let account = AccountInfo {
@@ -464,7 +462,7 @@ impl TinyEVM {
             db.insert_account_info(addr, account);
         } else {
             debug!("Set code for new account");
-            let code_hash = keccak256(&code.bytecode());
+            let code_hash = keccak256(code.bytecode());
             let code = Some(code);
 
             let account = AccountInfo {
@@ -491,7 +489,7 @@ impl TinyEVM {
             }
         }
 
-        return Ok(vec![]);
+        Ok(vec![])
     }
 
     /// Get Eth balance for an account
@@ -565,8 +563,10 @@ impl TinyEVM {
             None => ForkDB::create(),
         };
 
-        let mut env = Env::default();
-        env.cfg = cfg_env;
+        let mut env = Env {
+            cfg: cfg_env,
+            ..Default::default()
+        };
 
         if fork_enabled {
             let block = db.get_fork_block().unwrap();
@@ -596,7 +596,12 @@ impl TinyEVM {
 
         db.insert_account_info(owner, account);
 
+        let exe = Evm::builder()
+            .modify_env(|e| *e = Box::new(env.clone()))
+            .with_db(db.clone())
+            .build();
         let tinyevm = Self {
+            exe: Some(exe),
             owner,
             fork_url,
             block_id,
@@ -621,12 +626,7 @@ impl TinyEVM {
         let address = Address::from_str(&address)?;
         self.db.remote_addresses.get(&address).map_or_else(
             || Ok(vec![]),
-            |slots| {
-                Ok(slots
-                    .iter()
-                    .map(|s| ruint_u256_to_bigint(s))
-                    .collect::<Vec<_>>())
-            },
+            |slots| Ok(slots.iter().map(ruint_u256_to_bigint).collect::<Vec<_>>()),
         )
     }
 
@@ -939,8 +939,8 @@ impl TinyEVM {
             BLOCK_DIFFICULTY => env.block.difficulty = to_u256(value)?,
             BLOCK_GAS_LIMIT => env.block.gas_limit = to_u256(value)?,
             BLOCK_BASE_FEE_PER_GAS => env.block.basefee = to_u256(value)?,
-            ORIGIN => env.tx.caller = to_address(value)?.into(),
-            BLOCK_COINBASE => env.block.coinbase = to_address(value)?.into(),
+            ORIGIN => env.tx.caller = to_address(value)?,
+            BLOCK_COINBASE => env.block.coinbase = to_address(value)?,
             _ => return Err(eyre!("Unknown field: {}", &field))?,
         }
 
@@ -1060,7 +1060,7 @@ impl TinyEVM {
             .get(&from)
             .context("No snapshot found")?
             .clone();
-        db.accounts.insert(to.into(), account);
+        db.accounts.insert(to, account);
         Ok(())
     }
 
@@ -1077,7 +1077,7 @@ impl TinyEVM {
         let db = &mut self.db;
         let account = self.snapshots.get(&addr).context("No snapshot found")?;
 
-        db.accounts.insert(addr.into(), account.clone());
+        db.accounts.insert(addr, account.clone());
         Ok(())
     }
 }
