@@ -276,14 +276,7 @@ impl TinyEVM {
 
         // todo add the inspector to the exe
 
-        let mut exe: Evm<'_, (), ForkDB<FileSystemProviderCache>> = Evm::builder()
-            .modify_env(|env| {
-                *env = Box::new(self.env.clone());
-            })
-            .with_db(self.db.clone())
-            .build();
-
-        let result = exe.transact();
+        let result = self.exe.as_mut().unwrap().transact();
 
         trace!("deploy result: {:?}", result);
 
@@ -335,7 +328,10 @@ impl TinyEVM {
             addresses, address
         );
         if !addresses.is_empty() {
-            exe.context
+            self.exe
+                .as_mut()
+                .unwrap()
+                .context
                 .evm
                 .db
                 .instrument_data
