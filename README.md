@@ -1,3 +1,3 @@
 # tevm
 
-An EVM with instrumentation for debugging and analysis.
+An EVM with instrumentation for debugging and analysis using REVM.
