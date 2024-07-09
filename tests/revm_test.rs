@@ -1,6 +1,6 @@
 /// Test REVM functions
 extern crate lazy_static;
-use eyre::Result;
+use eyre::{ContextCompat, Result};
 use hex::ToHex;
 use lazy_static::lazy_static;
 use num_bigint::BigInt;
@@ -395,9 +395,11 @@ fn test_deterministic_deploy() {
 }
 
 #[test]
-fn test_deterministic_deploy_overwrite() {
+fn test_deterministic_deploy_overwrite() -> Result<()> {
     let contract_deploy_hex = include_str!("../tests/contracts/coverage.hex");
     let contract_deploy_bin = hex::decode(contract_deploy_hex).unwrap();
+    let target_address = Address::from_slice(H160::random().as_bytes());
+    let force_address = Some(target_address);
     let mut vm = TinyEVM::default();
     let c1 = vm
         .deploy_helper(
@@ -406,7 +408,7 @@ fn test_deterministic_deploy_overwrite() {
             UZERO,
             false,
             None,
-            None,
+            force_address,
         )
         .unwrap();
 
@@ -416,8 +418,29 @@ fn test_deterministic_deploy_overwrite() {
         c1
     );
 
+    let c1_address = Address::from_slice(&c1.data);
+    assert_eq!(
+        target_address, c1_address,
+        "Expecting the contract deployed to the target address"
+    );
+
+    let c1_code = {
+        let accounts = &vm.exe.as_ref().unwrap().db().accounts;
+        let account = accounts
+            .get(&target_address)
+            .context("Expecting first account has non nil value")?;
+        account.info.code_hash
+    };
+
     let c2 = vm
-        .deploy_helper(*OWNER, contract_deploy_bin, UZERO, true, None, None)
+        .deploy_helper(
+            *OWNER,
+            contract_deploy_bin,
+            UZERO,
+            true,
+            None,
+            force_address,
+        )
         .unwrap();
 
     assert!(
@@ -430,6 +453,17 @@ fn test_deterministic_deploy_overwrite() {
         c1.data, c2.data,
         "Deploy same contract with same salt should have same address"
     );
+
+    let c2_code = {
+        let accounts = &vm.exe.as_ref().unwrap().db().accounts;
+        let account = accounts
+            .get(&target_address)
+            .context("Expecting first account has non nil value")?;
+        account.info.code_hash
+    };
+
+    assert_eq!(c1_code, c2_code,);
+    Ok(())
 }
 
 #[test]
@@ -547,7 +581,7 @@ fn test_bug_data_in_deploy() {
     let mut vm = TinyEVM::default();
     let owner = OWNER.to_owned();
 
-    vm.set_account_balance(owner.into(), U256::MAX).unwrap();
+    vm.set_account_balance(owner, U256::MAX).unwrap();
 
     let bytecode = hex::decode(format!("{}{}", contract_hex, constructor_args_hex)).unwrap();
 
@@ -586,7 +620,7 @@ fn test_deploy_with_args_and_value() {
     let mut vm = TinyEVM::default();
     let owner = OWNER.to_owned();
 
-    vm.set_account_balance(owner.into(), U256::MAX).unwrap();
+    vm.set_account_balance(owner, U256::MAX).unwrap();
 
     let bytecode = hex::decode(format!("{}{}", contract_hex, constructor_args_hex)).unwrap();
 
@@ -604,7 +638,7 @@ fn test_deploy_with_args_and_value() {
     let address = Address::from_slice(&resp.data);
     assert_eq!(
         value,
-        vm.get_eth_balance(address.into()).unwrap(),
+        vm.get_eth_balance(address).unwrap(),
         "Contract should hold the expected balance"
     );
 
@@ -741,7 +775,7 @@ fn test_set_get_code() {
     assert!(r.is_ok(), "Set code by address should succeed.");
 
     let actual = vm
-        .get_code_by_address(owner.into())
+        .get_code_by_address(owner)
         .unwrap()
         .encode_hex::<String>();
 
