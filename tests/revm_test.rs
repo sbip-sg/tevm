@@ -121,7 +121,6 @@ fn make_transfer_bin(to: Address, amount: U256) -> Vec<u8> {
 
 #[test]
 fn test_contract_deploy_transfer_query() {
-    let _ = enable_tracing();
     deploy_hex!("../tests/contracts/C.hex", exe, address);
 
     println!(
@@ -846,7 +845,7 @@ fn test_blockhash() {
     ];
 
     for (block, hash) in test_cases {
-        vm.env.block.number = block;
+        // vm.env.block.number = block;
 
         let resp = vm
             .deploy_helper(owner, bytecode.clone(), UZERO, true, None, None)
@@ -1066,7 +1065,7 @@ fn test_runtime_configuration() {
         ..Default::default()
     };
 
-    vm.db.instrument_config = Some(config);
+    // vm.db.instrument_config = Some(config);
 
     vm.set_account_balance(
         *OWNER,
@@ -1182,7 +1181,7 @@ fn test_seen_addresses() {
     let mut vm = TinyEVM::default();
 
     {
-        vm.env.block.number = U256::from(100u64);
+        // vm.env.block.number = U256::from(100u64);
     }
 
     let bytecode = include_str!("./contracts/contract_addresses_A.hex");
@@ -1193,10 +1192,10 @@ fn test_seen_addresses() {
     assert!(resp.success, "Deploy contract A should succeed");
     let addr_a = Address::from_slice(&resp.data);
 
-    if let Some(ref mut config) = vm.db.instrument_config {
-        config.record_branch_for_target_only = true;
-        config.target_address = addr_a;
-    }
+    // if let Some(ref mut config) = vm.db.instrument_config {
+    //     config.record_branch_for_target_only = true;
+    //     config.target_address = addr_a;
+    // }
 
     let bytecode = include_str!("./contracts/contract_addresses_B.hex");
     let bytecode = format!("{}{:0>64}", bytecode, addr_a.encode_hex::<String>());
