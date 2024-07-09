@@ -48,7 +48,14 @@ macro_rules! deploy_hex {
         let bytecode_hex = include_str!($hex_path);
         let bytecode = hex::decode(bytecode_hex).unwrap();
 
-        let resp = $vm.deploy_helper(UZERO, *OWNER, bytecode, UZERO, false, None, None);
+        let resp = $vm.deploy_helper(
+            *OWNER,
+            bytecode,
+            UZERO,
+            false,
+            None,
+            Some(*CONTRACT_ADDRESS),
+        );
 
         assert!(
             resp.is_ok(),
@@ -177,7 +184,7 @@ fn single_bugtype_test_helper(
     let bytecode = hex::decode(contract_deploy_hex).unwrap();
 
     let resp = vm
-        .deploy_helper(UZERO, owner, bytecode, UZERO, false, None, None)
+        .deploy_helper(owner, bytecode, UZERO, false, None, None)
         .unwrap();
     let address = Address::from_slice(&resp.data);
 
@@ -368,7 +375,6 @@ fn test_deterministic_deploy() {
     let mut vm = TinyEVM::default();
     let c1 = vm
         .deploy_helper(
-            U256::from(1u64),
             *OWNER,
             contract_deploy_bin.clone(),
             UZERO,
@@ -381,15 +387,7 @@ fn test_deterministic_deploy() {
     assert!(c1.success, "Deploy use salt 1 should succeed: {:?}", &c1);
 
     let c2 = vm
-        .deploy_helper(
-            U256::from(2),
-            *OWNER,
-            contract_deploy_bin,
-            UZERO,
-            false,
-            None,
-            None,
-        )
+        .deploy_helper(*OWNER, contract_deploy_bin, UZERO, false, None, None)
         .unwrap();
 
     assert!(c2.success, "Deploy use salt 2 should succeed: {:?}", &c2);
@@ -404,7 +402,6 @@ fn test_deterministic_deploy_overwrite() {
     let mut vm = TinyEVM::default();
     let c1 = vm
         .deploy_helper(
-            UZERO,
             *OWNER,
             contract_deploy_bin.clone(),
             UZERO,
@@ -421,7 +418,7 @@ fn test_deterministic_deploy_overwrite() {
     );
 
     let c2 = vm
-        .deploy_helper(UZERO, *OWNER, contract_deploy_bin, UZERO, true, None, None)
+        .deploy_helper(*OWNER, contract_deploy_bin, UZERO, true, None, None)
         .unwrap();
 
     assert!(
@@ -556,7 +553,7 @@ fn test_bug_data_in_deploy() {
     let bytecode = hex::decode(format!("{}{}", contract_hex, constructor_args_hex)).unwrap();
 
     let resp = vm
-        .deploy_helper(UZERO, owner, bytecode, UZERO, false, None, None)
+        .deploy_helper(owner, bytecode, UZERO, false, None, None)
         .unwrap();
 
     assert!(resp.success, "Contract deploy should succeed.");
@@ -595,7 +592,7 @@ fn test_deploy_with_args_and_value() {
     let bytecode = hex::decode(format!("{}{}", contract_hex, constructor_args_hex)).unwrap();
 
     let resp = vm
-        .deploy_helper(UZERO, owner, bytecode, value, false, None, None)
+        .deploy_helper(owner, bytecode, value, false, None, None)
         .unwrap();
 
     println!("resp: {resp:?}");
@@ -664,7 +661,7 @@ fn test_gas_usage() {
     let bytecode_hex = include_str!("../tests/contracts/gasusage.hex");
     let bytecode = hex::decode(bytecode_hex).unwrap();
 
-    let resp = vm.deploy_helper(UZERO, *OWNER, bytecode, UZERO, false, None, None);
+    let resp = vm.deploy_helper(*OWNER, bytecode, UZERO, false, None, None);
 
     assert!(resp.is_ok(), "Contract deploy should succeed.");
 
@@ -852,7 +849,7 @@ fn test_blockhash() {
         vm.env.block.number = block;
 
         let resp = vm
-            .deploy_helper(UZERO, owner, bytecode.clone(), UZERO, true, None, None)
+            .deploy_helper(owner, bytecode.clone(), UZERO, true, None, None)
             .unwrap();
 
         let addr = Address::from_slice(&resp.data);
@@ -962,7 +959,7 @@ fn test_get_set_balance() {
     let bytecode = include_str!("../tests/contracts/balance.hex");
     let bytecode = hex::decode(bytecode).unwrap();
     let resp = vm
-        .deploy_helper(UZERO, owner, bytecode, UZERO, false, None, None)
+        .deploy_helper(owner, bytecode, UZERO, false, None, None)
         .unwrap();
     assert!(resp.success, "Deployment should succeed");
     let addr = Address::from_slice(&resp.data);
@@ -1191,7 +1188,7 @@ fn test_seen_addresses() {
     let bytecode = include_str!("./contracts/contract_addresses_A.hex");
     let bytecode = hex::decode(bytecode).unwrap();
     let resp = vm
-        .deploy_helper(UZERO, *OWNER, bytecode, UZERO, false, None, None)
+        .deploy_helper(*OWNER, bytecode, UZERO, false, None, None)
         .unwrap();
     assert!(resp.success, "Deploy contract A should succeed");
     let addr_a = Address::from_slice(&resp.data);
@@ -1206,7 +1203,7 @@ fn test_seen_addresses() {
     println!("Deploying contract B with bytecode: {}", bytecode);
     let bytecode = hex::decode(bytecode).unwrap();
     let resp = vm
-        .deploy_helper(UZERO, *OWNER, bytecode, UZERO, false, None, None)
+        .deploy_helper(*OWNER, bytecode, UZERO, false, None, None)
         .unwrap();
     assert!(
         resp.success,

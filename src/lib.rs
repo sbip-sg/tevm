@@ -214,18 +214,16 @@ impl TinyEVM {
     /// Deploy the contract for the `owner`.
     pub fn deploy_helper(
         &mut self,
-        salt: U256,
         owner: Address,
         contract_bytecode: Vec<u8>,
         value: U256,
-        overwrite: bool,
+        _overwrite: bool, // not supported yet
         tx_gas_limit: Option<u64>,
-        force_address: Option<Address>,
+        force_address: Option<Address>, // not supported yet
     ) -> Result<Response> {
         trace!(
-            "deploy_helper: {:?}, {:?}, {:?}, {:?}",
+            "deploy_helper: {:?}, {:?}, {:?}",
             contract_bytecode.encode_hex::<String>(),
-            salt,
             owner,
             value,
         );
@@ -252,21 +250,16 @@ impl TinyEVM {
             self.exe = Some(exe);
         }
 
-        let code_hash = keccak256(&contract_bytecode);
-        let address = owner.create2(B256::from(salt), code_hash);
-
-        // TODO Could check if the address is already created beforing
-        // running a transaction, this could potentially reduce time
+        let nonce = self.exe.as_ref().unwrap().tx().nonce.unwrap_or_default();
+        let address = owner.create(nonce);
 
         debug!("Calculated addresss: {:?}", address);
 
         let mut traces = vec![];
         let mut logs = vec![];
         let mut override_addresses = HashMap::with_capacity(1);
-        if let Some(force_address) = force_address {
-            override_addresses.insert(address, force_address);
-        }
         let trace_enabled = matches!(env::var("TINYEVM_CALL_TRACE_ENABLED"), Ok(val) if val == "1");
+
         let inspector = LogsInspector {
             trace_enabled,
             traces: &mut traces,
@@ -277,6 +270,11 @@ impl TinyEVM {
         // todo add the inspector to the exe
 
         let result = self.exe.as_mut().unwrap().transact_commit();
+
+        if let Some(force_address) = force_address {
+            override_addresses.insert(address, force_address);
+            self.clone_account(address, force_address, true)?;
+        }
 
         // debug!("db {:?}", self.exe.as_ref().unwrap().db());
         // debug!("sender {:?}", owner.encode_hex::<String>(),);
@@ -307,23 +305,10 @@ impl TinyEVM {
                 address.encode_hex::<String>()
             );
 
-            if overwrite {
-                self.nuke_account(address)?;
-                return self.deploy_helper(
-                    salt,
-                    owner,
-                    contract_bytecode,
-                    value,
-                    false,
-                    tx_gas_limit,
-                    force_address,
-                );
-            } else {
-                Err(eyre!(
-                    "Address collision for {}",
-                    address.encode_hex::<String>()
-                ))?;
-            }
+            return Err(eyre!(
+                "Address collision for {}",
+                address.encode_hex::<String>()
+            ))?;
         }
 
         let bug_data = self.bug_data().clone();
@@ -357,7 +342,11 @@ impl TinyEVM {
             traces: vec![],
             ignored_addresses: Default::default(),
         };
-        Ok(revm_result.into())
+        let mut resp: Response = revm_result.into();
+        if let Some(force_address) = force_address {
+            resp.data = force_address.0.to_vec();
+        }
+        Ok(resp)
     }
 
     /// Send a `transact_call` to a `contract` from the `sender` with raw
@@ -529,6 +518,22 @@ impl TinyEVM {
         self.db.insert_account_storage(addr, index, value)?;
         Ok(())
     }
+
+    /// Clone account from one address to another. If `delete` is true, the original account will be deleted.
+    pub fn clone_account(&mut self, from: Address, to: Address, delete: bool) -> Result<()> {
+        let db = &mut self.db;
+        let accounts = &db.accounts;
+        let account = accounts.get(&from).cloned();
+
+        if let Some(account) = account {
+            db.accounts.insert(to, account);
+            if delete {
+                db.accounts.remove(&from);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for TinyEVM {
@@ -644,8 +649,7 @@ impl TinyEVM {
         self.db.fork_enabled
     }
 
-    /// Deploy a contract using contract deploy binary and default salt of zero.
-    /// The contract will be deployed with CREATE2.
+    /// Deploy a contract using contract deploy binary
     ///
     /// - `contract_deploy_code`: contract deploy binary array encoded as hex string
     /// - `owner`: owner address as a 20-byte array encoded as hex string
@@ -655,39 +659,43 @@ impl TinyEVM {
         contract_deploy_code: String,
         owner: Option<String>,
     ) -> Result<Response> {
-        self.deterministic_deploy(contract_deploy_code, None, owner, None, None, None, None)
+        self.deploy_helper(
+            Address::from_str(&owner.unwrap_or_default())?,
+            hex::decode(contract_deploy_code)?,
+            U256::default(),
+            true,
+            Some(self.tx_gas_limit),
+            None,
+        )
     }
 
-    /// Deploy a contract using contract deploy binary and the provided
-    /// salt, the contract address is calculated by `hash(0xFF, sender,
-    /// salt, bytecode)`. If the account already exists in the executor,
-    /// the nonce and code of the account will be **overwritten**.
+    /// Deploy a contract using contract deploy binary If the account already
+    /// exists in the executor, the nonce and code of the account will be
+    /// **overwritten**.
     ///
     /// For optional arguments, you can use the empty string as inputs to use the default values.
     ///
     /// [Source: <https://docs.openzeppelin.com/cli/2.8/deploying-with-create2#create2>]
     ///
     /// - `contract_deploy_code`: contract deploy binary array encoded as hex string
-    /// - `salt`: (Optional, default to random) A 32-byte array encoded as hex string. Default to zero. This value has no effect if `deploy_to_address` is provided.
+    /// - `deploy_to_address`: Deploy the contract to the address
     /// - `owner`: Owner address as a 20-byte array encoded as hex string
     /// - `data`: (Optional, default empty) Constructor arguments encoded as hex string.
     /// - `value`: (Optional, default 0) a U256. Set the value to be included in the contract creation transaction.
     ///   - This requires the constructor to be payable.
     ///   - The transaction sender (owner) must have enough balance
     /// - `init_value`: (Optional) BigInt. Override the initial balance of the contract to this value.
-    /// - `deploy_to_address`: (Optional) hex string. The address to deploy to, will be overridden if it's not empty.
     ///
     /// Returns a list consisting of 4 items `[reason, address-as-byte-array, bug_data, heuristics]`
-    #[pyo3(signature = (contract_deploy_code, salt=None, owner=None, data=None, value=None, init_value=None, deploy_to_address=None))]
+    #[pyo3(signature = (contract_deploy_code, deploy_to_address, owner=None, data=None, value=None, init_value=None))]
     pub fn deterministic_deploy(
         &mut self,
         contract_deploy_code: String, // variable length
-        salt: Option<String>,         // h256 as hex string
-        owner: Option<String>,        // h160 as hex string
-        data: Option<String>,         // variable length
+        deploy_to_address: String,
+        owner: Option<String>, // h160 as hex string
+        data: Option<String>,  // variable length
         value: Option<BigInt>,
         init_value: Option<BigInt>,
-        deploy_to_address: Option<String>,
     ) -> Result<Response> {
         let owner = {
             if let Some(owner) = owner {
@@ -695,15 +703,6 @@ impl TinyEVM {
                 Address::from_str(trim_prefix(owner, "0x"))?
             } else {
                 self.owner
-            }
-        };
-
-        let salt = {
-            if let Some(salt) = salt {
-                let salt = &salt;
-                U256::from_str_radix(trim_prefix(salt, "0x"), 16)?
-            } else {
-                U256::default()
             }
         };
 
@@ -718,17 +717,15 @@ impl TinyEVM {
         let value = value.unwrap_or_default();
         let mut contract_bytecode = contract_deploy_code.to_vec();
         contract_bytecode.extend(data);
-        // contract_bytecode.extend(&salt.to_be_bytes::<32>().to_vec());
 
         let resp = {
             let resp = self.deploy_helper(
-                salt,
                 owner,
                 contract_bytecode,
                 bigint_to_ruint_u256(&value)?,
                 true,
                 Some(self.tx_gas_limit),
-                deploy_to_address.and_then(|a| Address::from_str(&a).ok()),
+                Some(Address::from_str(&deploy_to_address)?),
             )?;
 
             if let Some(balance) = init_value {
