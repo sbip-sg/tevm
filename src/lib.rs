@@ -639,8 +639,12 @@ impl TinyEVM {
         contract_deploy_code: String,
         owner: Option<String>,
     ) -> Result<Response> {
+        let owner = owner
+            .map(|address| Address::from_str(&address))
+            .unwrap_or(Ok(self.owner))?;
         self.deploy_helper(
-            Address::from_str(&owner.unwrap_or_default())?,
+            // Address::from_str(&owner.unwrap_or_default())?,
+            owner,
             hex::decode(contract_deploy_code)?,
             U256::default(),
             true,
