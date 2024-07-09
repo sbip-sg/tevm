@@ -879,7 +879,8 @@ fn test_blockhash() {
     ];
 
     for (block, hash) in test_cases {
-        // vm.env.block.number = block;
+        let block_env = &mut vm.exe.as_mut().unwrap().block_mut();
+        block_env.number = block;
 
         let resp = vm
             .deploy_helper(owner, bytecode.clone(), UZERO, true, None, None)

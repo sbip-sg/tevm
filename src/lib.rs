@@ -905,29 +905,34 @@ impl TinyEVM {
     pub fn set_env_field_value_inner(&mut self, field: &str, value: &str) -> Result<()> {
         debug!("set_env_field_value_inner: {} {}", field, value);
 
-        // let value = trim_prefix(value, "0x");
+        let value = trim_prefix(value, "0x");
 
-        // let to_u256 = |v: &str| U256::from_str_radix(v, 16);
-        // let to_address = |v: &str| Address::from_str(v);
+        let to_u256 = |v: &str| U256::from_str_radix(v, 16);
+        let to_address = |v: &str| Address::from_str(v);
 
-        // let exe = &mut self.exe.as_mut().unwrap();
+        macro_rules! set_env_field {
+            ($field:ident, $value:expr, $env:ident, $method:ident) => {{
+                let env = &mut self.exe.as_mut().unwrap().$env();
+                env.$field = $method($value)?;
+            }};
+        }
+        match field {
+            CHAIN_ID => {
+                let cfg = &mut self.exe.as_mut().unwrap().cfg_mut();
+                cfg.chain_id = u64::from_str_radix(value, 16)?;
+            }
+            GAS_PRICE => set_env_field!(gas_price, value, tx_mut, to_u256),
+            ORIGIN => set_env_field!(caller, value, tx_mut, to_address),
+            BLOCK_NUMBER => set_env_field!(number, value, block_mut, to_u256),
+            BLOCK_TIMESTAMP => set_env_field!(timestamp, value, block_mut, to_u256),
+            BLOCK_DIFFICULTY => set_env_field!(difficulty, value, block_mut, to_u256),
+            BLOCK_GAS_LIMIT => set_env_field!(gas_limit, value, block_mut, to_u256),
+            BLOCK_BASE_FEE_PER_GAS => set_env_field!(basefee, value, block_mut, to_u256),
+            BLOCK_COINBASE => set_env_field!(coinbase, value, block_mut, to_address),
+            _ => return Err(eyre!("Unknown field: {}", &field))?,
+        }
 
-        todo!()
-
-        // match field {
-        //     GAS_PRICE => exe.gas_price = to_u256(value)?,
-        //     CHAIN_ID => env.cfg().chain_id = u64::from_str_radix(value, 16)?,
-        //     BLOCK_NUMBER => env.block.number = to_u256(value)?,
-        //     BLOCK_TIMESTAMP => env.block.timestamp = to_u256(value)?,
-        //     BLOCK_DIFFICULTY => env.block.difficulty = to_u256(value)?,
-        //     BLOCK_GAS_LIMIT => env.block.gas_limit = to_u256(value)?,
-        //     BLOCK_BASE_FEE_PER_GAS => env.block.basefee = to_u256(value)?,
-        //     ORIGIN => env.tx.caller = to_address(value)?,
-        //     BLOCK_COINBASE => env.block.coinbase = to_address(value)?,
-        //     _ => return Err(eyre!("Unknown field: {}", &field))?,
-        // }
-
-        // Ok(())
+        Ok(())
     }
 
     /// API to set tx origin, after this method call, tx.origin will always return the set address.
