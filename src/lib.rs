@@ -7,9 +7,13 @@ use ::revm::{
     },
     Evm,
 };
+#[cfg(feature = "redis")]
+use cache::redis_cache::RedisProviderCache as DefaultProviderCache;
 use hashbrown::{HashMap, HashSet};
-// TODO use feature to load only one of them
-use cache::{filesystem_cache::FileSystemProviderCache, redis_cache::RedisProviderCache};
+
+#[cfg(not(feature = "redis"))]
+use cache::filesystem_cache::FileSystemProviderCache as DefaultProviderCache;
+
 use dotenv::dotenv;
 use ethers_providers::{Http, Provider};
 use eyre::{eyre, ContextCompat, Result};
@@ -72,9 +76,7 @@ define_static_string![
 pub const DEFAULT_BALANCE: U256 =
     U256::from_limbs([0x0, 0xffffffffffffffff, 0xffffffffffffffff, 0x0]);
 
-pub type FileSystemTinyEvmDb = ForkDB<FileSystemProviderCache>;
-
-pub type RedisTinyEvmDb = ForkDB<RedisProviderCache>;
+pub type TinyEvmDb = ForkDB<DefaultProviderCache>;
 
 pub struct TinyEvmContext {}
 
@@ -82,7 +84,7 @@ pub struct TinyEvmContext {}
 #[pyclass(unsendable)]
 pub struct TinyEVM {
     /// REVM instance
-    pub exe: Option<Evm<'static, (), ForkDB<FileSystemProviderCache>>>,
+    pub exe: Option<Evm<'static, (), TinyEvmDb>>,
     pub owner: Address,
     /// Snapshots of account state
     pub snapshots: HashMap<Address, DbAccount>,
