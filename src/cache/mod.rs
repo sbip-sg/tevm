@@ -1,6 +1,9 @@
 use eyre::Result;
 
+#[cfg(not(feature = "redis"))]
 pub mod filesystem_cache;
+
+#[cfg(feature = "redis")]
 pub mod redis_cache;
 
 pub trait ProviderCache: Clone + Default {
@@ -13,11 +16,5 @@ pub trait ProviderCache: Clone + Default {
         response: &str,
     ) -> Result<()>;
 
-    fn get(
-        &self,
-        chain: &str,
-        block: u64,
-        api: &str,
-        request_hash: &str,
-    ) -> Result<String>;
+    fn get(&self, chain: &str, block: u64, api: &str, request_hash: &str) -> Result<String>;
 }

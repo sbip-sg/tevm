@@ -35,7 +35,11 @@ thread_local = "1.1.8"
 tokio = { version = "1.38.0", features = ["full"] }
 strum_macros = "0.26.4"
 hashbrown = "*"
-redis = "0.25.4"
+redis = { version= "0.25.4", optional = true}
 
 [dev-dependencies]
 criterion = {version="0.3.6", features=["html_reports"] }
+
+[features]
+default = []
+redis=["dep:redis"]

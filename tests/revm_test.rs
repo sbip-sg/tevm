@@ -1,6 +1,6 @@
 /// Test REVM functions
 extern crate lazy_static;
-use eyre::Result;
+use eyre::{ContextCompat, Result};
 use hex::ToHex;
 use lazy_static::lazy_static;
 use num_bigint::BigInt;
@@ -48,7 +48,14 @@ macro_rules! deploy_hex {
         let bytecode_hex = include_str!($hex_path);
         let bytecode = hex::decode(bytecode_hex).unwrap();
 
-        let resp = $vm.deploy_helper(UZERO, *OWNER, bytecode, UZERO, false, None, None);
+        let resp = $vm.deploy_helper(
+            *OWNER,
+            bytecode,
+            UZERO,
+            false,
+            None,
+            Some(*CONTRACT_ADDRESS),
+        );
 
         assert!(
             resp.is_ok(),
@@ -114,7 +121,6 @@ fn make_transfer_bin(to: Address, amount: U256) -> Vec<u8> {
 
 #[test]
 fn test_contract_deploy_transfer_query() {
-    let _ = enable_tracing();
     deploy_hex!("../tests/contracts/C.hex", exe, address);
 
     println!(
@@ -177,7 +183,7 @@ fn single_bugtype_test_helper(
     let bytecode = hex::decode(contract_deploy_hex).unwrap();
 
     let resp = vm
-        .deploy_helper(UZERO, owner, bytecode, UZERO, false, None, None)
+        .deploy_helper(owner, bytecode, UZERO, false, None, None)
         .unwrap();
     let address = Address::from_slice(&resp.data);
 
@@ -368,7 +374,6 @@ fn test_deterministic_deploy() {
     let mut vm = TinyEVM::default();
     let c1 = vm
         .deploy_helper(
-            U256::from(1u64),
             *OWNER,
             contract_deploy_bin.clone(),
             UZERO,
@@ -381,15 +386,7 @@ fn test_deterministic_deploy() {
     assert!(c1.success, "Deploy use salt 1 should succeed: {:?}", &c1);
 
     let c2 = vm
-        .deploy_helper(
-            U256::from(2),
-            *OWNER,
-            contract_deploy_bin,
-            UZERO,
-            false,
-            None,
-            None,
-        )
+        .deploy_helper(*OWNER, contract_deploy_bin, UZERO, false, None, None)
         .unwrap();
 
     assert!(c2.success, "Deploy use salt 2 should succeed: {:?}", &c2);
@@ -398,19 +395,20 @@ fn test_deterministic_deploy() {
 }
 
 #[test]
-fn test_deterministic_deploy_overwrite() {
+fn test_deterministic_deploy_overwrite() -> Result<()> {
     let contract_deploy_hex = include_str!("../tests/contracts/coverage.hex");
     let contract_deploy_bin = hex::decode(contract_deploy_hex).unwrap();
+    let target_address = Address::from_slice(H160::random().as_bytes());
+    let force_address = Some(target_address);
     let mut vm = TinyEVM::default();
     let c1 = vm
         .deploy_helper(
-            UZERO,
             *OWNER,
             contract_deploy_bin.clone(),
             UZERO,
             false,
             None,
-            None,
+            force_address,
         )
         .unwrap();
 
@@ -420,8 +418,29 @@ fn test_deterministic_deploy_overwrite() {
         c1
     );
 
+    let c1_address = Address::from_slice(&c1.data);
+    assert_eq!(
+        target_address, c1_address,
+        "Expecting the contract deployed to the target address"
+    );
+
+    let c1_code = {
+        let accounts = &vm.exe.as_ref().unwrap().db().accounts;
+        let account = accounts
+            .get(&target_address)
+            .context("Expecting first account has non nil value")?;
+        account.info.code_hash
+    };
+
     let c2 = vm
-        .deploy_helper(UZERO, *OWNER, contract_deploy_bin, UZERO, true, None, None)
+        .deploy_helper(
+            *OWNER,
+            contract_deploy_bin,
+            UZERO,
+            true,
+            None,
+            force_address,
+        )
         .unwrap();
 
     assert!(
@@ -434,6 +453,17 @@ fn test_deterministic_deploy_overwrite() {
         c1.data, c2.data,
         "Deploy same contract with same salt should have same address"
     );
+
+    let c2_code = {
+        let accounts = &vm.exe.as_ref().unwrap().db().accounts;
+        let account = accounts
+            .get(&target_address)
+            .context("Expecting first account has non nil value")?;
+        account.info.code_hash
+    };
+
+    assert_eq!(c1_code, c2_code,);
+    Ok(())
 }
 
 #[test]
@@ -551,12 +581,12 @@ fn test_bug_data_in_deploy() {
     let mut vm = TinyEVM::default();
     let owner = OWNER.to_owned();
 
-    vm.set_account_balance(owner.into(), U256::MAX).unwrap();
+    vm.set_account_balance(owner, U256::MAX).unwrap();
 
     let bytecode = hex::decode(format!("{}{}", contract_hex, constructor_args_hex)).unwrap();
 
     let resp = vm
-        .deploy_helper(UZERO, owner, bytecode, UZERO, false, None, None)
+        .deploy_helper(owner, bytecode, UZERO, false, None, None)
         .unwrap();
 
     assert!(resp.success, "Contract deploy should succeed.");
@@ -590,12 +620,12 @@ fn test_deploy_with_args_and_value() {
     let mut vm = TinyEVM::default();
     let owner = OWNER.to_owned();
 
-    vm.set_account_balance(owner.into(), U256::MAX).unwrap();
+    vm.set_account_balance(owner, U256::MAX).unwrap();
 
     let bytecode = hex::decode(format!("{}{}", contract_hex, constructor_args_hex)).unwrap();
 
     let resp = vm
-        .deploy_helper(UZERO, owner, bytecode, value, false, None, None)
+        .deploy_helper(owner, bytecode, value, false, None, None)
         .unwrap();
 
     println!("resp: {resp:?}");
@@ -608,7 +638,7 @@ fn test_deploy_with_args_and_value() {
     let address = Address::from_slice(&resp.data);
     assert_eq!(
         value,
-        vm.get_eth_balance(address.into()).unwrap(),
+        vm.get_eth_balance(address).unwrap(),
         "Contract should hold the expected balance"
     );
 
@@ -664,7 +694,7 @@ fn test_gas_usage() {
     let bytecode_hex = include_str!("../tests/contracts/gasusage.hex");
     let bytecode = hex::decode(bytecode_hex).unwrap();
 
-    let resp = vm.deploy_helper(UZERO, *OWNER, bytecode, UZERO, false, None, None);
+    let resp = vm.deploy_helper(*OWNER, bytecode, UZERO, false, None, None);
 
     assert!(resp.is_ok(), "Contract deploy should succeed.");
 
@@ -745,7 +775,7 @@ fn test_set_get_code() {
     assert!(r.is_ok(), "Set code by address should succeed.");
 
     let actual = vm
-        .get_code_by_address(owner.into())
+        .get_code_by_address(owner)
         .unwrap()
         .encode_hex::<String>();
 
@@ -849,10 +879,11 @@ fn test_blockhash() {
     ];
 
     for (block, hash) in test_cases {
-        vm.env.block.number = block;
+        let block_env = &mut vm.exe.as_mut().unwrap().block_mut();
+        block_env.number = block;
 
         let resp = vm
-            .deploy_helper(UZERO, owner, bytecode.clone(), UZERO, true, None, None)
+            .deploy_helper(owner, bytecode.clone(), UZERO, true, None, None)
             .unwrap();
 
         let addr = Address::from_slice(&resp.data);
@@ -962,7 +993,7 @@ fn test_get_set_balance() {
     let bytecode = include_str!("../tests/contracts/balance.hex");
     let bytecode = hex::decode(bytecode).unwrap();
     let resp = vm
-        .deploy_helper(UZERO, owner, bytecode, UZERO, false, None, None)
+        .deploy_helper(owner, bytecode, UZERO, false, None, None)
         .unwrap();
     assert!(resp.success, "Deployment should succeed");
     let addr = Address::from_slice(&resp.data);
@@ -1069,7 +1100,7 @@ fn test_runtime_configuration() {
         ..Default::default()
     };
 
-    vm.db.instrument_config = Some(config);
+    // vm.db.instrument_config = Some(config);
 
     vm.set_account_balance(
         *OWNER,
@@ -1185,28 +1216,28 @@ fn test_seen_addresses() {
     let mut vm = TinyEVM::default();
 
     {
-        vm.env.block.number = U256::from(100u64);
+        // vm.env.block.number = U256::from(100u64);
     }
 
     let bytecode = include_str!("./contracts/contract_addresses_A.hex");
     let bytecode = hex::decode(bytecode).unwrap();
     let resp = vm
-        .deploy_helper(UZERO, *OWNER, bytecode, UZERO, false, None, None)
+        .deploy_helper(*OWNER, bytecode, UZERO, false, None, None)
         .unwrap();
     assert!(resp.success, "Deploy contract A should succeed");
     let addr_a = Address::from_slice(&resp.data);
 
-    if let Some(ref mut config) = vm.db.instrument_config {
-        config.record_branch_for_target_only = true;
-        config.target_address = addr_a;
-    }
+    // if let Some(ref mut config) = vm.db.instrument_config {
+    //     config.record_branch_for_target_only = true;
+    //     config.target_address = addr_a;
+    // }
 
     let bytecode = include_str!("./contracts/contract_addresses_B.hex");
     let bytecode = format!("{}{:0>64}", bytecode, addr_a.encode_hex::<String>());
     println!("Deploying contract B with bytecode: {}", bytecode);
     let bytecode = hex::decode(bytecode).unwrap();
     let resp = vm
-        .deploy_helper(UZERO, *OWNER, bytecode, UZERO, false, None, None)
+        .deploy_helper(*OWNER, bytecode, UZERO, false, None, None)
         .unwrap();
     assert!(
         resp.success,
@@ -1350,6 +1381,7 @@ fn test_fork() -> Result<()> {
 
 #[test]
 fn test_call_forked_contract_from_local_contract() -> Result<()> {
+    let _ = enable_tracing();
     let bin = include_str!("../tests/contracts/test_fork.hex");
     let fork_url = Some("https://bscrpc.com".into());
     let block_id = Some(0x1e08bd6);
