@@ -55,6 +55,7 @@ impl<DB> Inspector<DB> for LogsInspector
 where
     DB: Database,
 {
+    #[inline]
     fn log(&mut self, _context: &mut EvmContext<DB>, evm_log: &EvmLog) {
         if !self.trace_enabled {
             return;
@@ -72,6 +73,7 @@ where
         });
     }
 
+    #[inline]
     fn call(
         &mut self,
         _context: &mut EvmContext<DB>,
@@ -116,6 +118,7 @@ where
         None
     }
 
+    #[inline]
     fn call_end(
         &mut self,
         _context: &mut EvmContext<DB>,
@@ -138,6 +141,7 @@ where
         result
     }
 
+    #[inline]
     fn create_end(
         &mut self,
         _context: &mut EvmContext<DB>,
