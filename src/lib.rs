@@ -26,6 +26,7 @@ use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
 /// Caching for Web3 provider
 mod cache;
+mod chain_inspector;
 /// Common functions shared by both EVMs
 mod common;
 
@@ -1088,8 +1089,6 @@ impl TinyEVM {
 /// REVM::InstrumentConfig
 #[pyclass(set_all, get_all)]
 pub struct REVMConfig {
-    /// Master switch to toggle instrumentation
-    pub enabled: bool,
     /// Enable recording seen PCs by current contract address
     pub pcs_by_address: bool,
     /// Enable heuristics which will record list of jumpi destinations
@@ -1134,7 +1133,6 @@ impl REVMConfig {
 
         Ok(InstrumentConfig {
             target_address,
-            enabled: self.enabled,
             pcs_by_address: self.pcs_by_address,
             heuristics: self.heuristics,
             record_branch_for_target_only: self.record_branch_for_target_only,
@@ -1145,7 +1143,6 @@ impl REVMConfig {
     /// Convert to `REVMConfig` from internal Rust struct
     fn from(config: &InstrumentConfig) -> Self {
         Self {
-            enabled: config.enabled,
             pcs_by_address: config.pcs_by_address,
             heuristics: config.heuristics,
             record_branch_for_target_only: config.record_branch_for_target_only,

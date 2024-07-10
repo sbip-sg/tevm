@@ -168,8 +168,6 @@ impl Heuristics {
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "with-serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InstrumentConfig {
-    /// Master switch to toggle instrumentation
-    pub enabled: bool,
     /// Enable recording seen PCs by current contract address
     pub pcs_by_address: bool,
     /// Enable heuristics which will record list of jumpi destinations
@@ -189,7 +187,6 @@ pub struct InstrumentConfig {
 impl Default for InstrumentConfig {
     fn default() -> InstrumentConfig {
         InstrumentConfig {
-            enabled: true,
             pcs_by_address: true,
             heuristics: true,
             record_branch_for_target_only: false,
