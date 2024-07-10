@@ -1515,7 +1515,7 @@ fn test_events() -> Result<()> {
     let contract = format!("0x{:0>40}", hex::encode(&resp.data));
     println!("Contract address: {}", contract);
     let data = format!(
-        "{}{:x}",
+        "{}{:064x}",
         "1401d2b5", // makeEvent(3232)
         U256::from(3232)
     );

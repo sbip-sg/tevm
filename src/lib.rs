@@ -84,7 +84,7 @@ pub struct TinyEvmContext {}
 #[pyclass(unsendable)]
 pub struct TinyEVM {
     /// REVM instance
-    pub exe: Option<Evm<'static, (), TinyEvmDb>>,
+    pub exe: Option<Evm<'static, LogsInspector, TinyEvmDb>>,
     pub owner: Address,
     /// Snapshots of account state
     pub snapshots: HashMap<Address, DbAccount>,
@@ -140,7 +140,7 @@ impl TinyEVM {
 
     /// Create a new TinyEVM instance without fork
     pub fn new_offline() -> Result<Self> {
-        Self::new(None, None)
+        Self::new_instance(None, None, false)
     }
 
     /// Set account balance, if the account does not exist, will create one
@@ -235,26 +235,14 @@ impl TinyEVM {
 
         debug!("Calculated addresss: {:?}", address);
 
-        let mut traces = vec![];
-        let mut logs = vec![];
-        let mut override_addresses = HashMap::with_capacity(1);
-        let trace_enabled = matches!(env::var("TINYEVM_CALL_TRACE_ENABLED"), Ok(val) if val == "1");
-
-        let inspector = LogsInspector {
-            trace_enabled,
-            traces: &mut traces,
-            logs: &mut logs,
-            override_addresses: &override_addresses,
-        };
-
         // todo add the inspector to the exe
 
         let result = self.exe.as_mut().unwrap().transact_commit();
 
-        if let Some(force_address) = force_address {
-            override_addresses.insert(address, force_address);
-            self.clone_account(address, force_address, true)?;
-        }
+        // if let Some(force_address) = force_address {
+        //     override_addresses.insert(address, force_address);
+        //     self.clone_account(address, force_address, true)?;
+        // }
 
         // debug!("db {:?}", self.exe.as_ref().unwrap().db());
         // debug!("sender {:?}", owner.encode_hex::<String>(),);
@@ -360,16 +348,16 @@ impl TinyEVM {
             self.exe = Some(exe);
         }
 
-        let mut traces = vec![];
-        let mut logs = vec![];
-        let trace_enabled = matches!(env::var("TINYEVM_CALL_TRACE_ENABLED"), Ok(val) if val == "1");
+        // let mut traces = vec![];
+        // let mut logs = vec![];
+        // let trace_enabled = matches!(env::var("TINYEVM_CALL_TRACE_ENABLED"), Ok(val) if val == "1");
 
-        let inspector = LogsInspector {
-            trace_enabled,
-            traces: &mut traces,
-            logs: &mut logs,
-            override_addresses: &mut Default::default(),
-        };
+        // let inspector = LogsInspector {
+        //     trace_enabled,
+        //     traces: &mut traces,
+        //     logs: &mut logs,
+        //     override_addresses: &mut Default::default(),
+        // };
 
         let result = {
             let exe = self.exe.as_mut().unwrap();
@@ -401,13 +389,15 @@ impl TinyEVM {
         let ignored_addresses = db.ignored_addresses.clone();
         let ignored_addresses = ignored_addresses.into_iter().map(Into::into).collect();
 
+        // let logs = self.exe.as_ref().unwrap().context.external;
+
         let revm_result = RevmResult {
             result: result.map_err(|e| eyre!(e)),
             bug_data,
             heuristics,
             seen_pcs,
-            transient_logs: logs,
-            traces,
+            transient_logs: Vec::new(), // todo logs,
+            traces: Vec::new(),         // todo
             ignored_addresses,
         };
         revm_result.into()
@@ -515,21 +505,12 @@ impl TinyEVM {
 
         Ok(())
     }
-}
 
-impl Default for TinyEVM {
-    fn default() -> Self {
-        Self::new(None, None).unwrap()
-    }
-}
-
-// Implementations for use in Python and Rust
-#[pymethods]
-impl TinyEVM {
-    /// Create a new TinyEVM instance
-    #[new]
-    #[pyo3(signature = (fork_url = None, block_id = None))]
-    pub fn new(fork_url: Option<String>, block_id: Option<u64>) -> Result<Self> {
+    pub fn new_instance(
+        fork_url: Option<String>,
+        block_id: Option<u64>,
+        enable_call_trace: bool, // Whether to show call and event traces
+    ) -> Result<Self> {
         dotenv().ok();
         let owner = Address::default();
 
@@ -585,10 +566,20 @@ impl TinyEVM {
         };
 
         db.insert_account_info(owner, account);
+        // let mut builder = Evm::builder();
+        let inspector = LogsInspector {
+            trace_enabled: enable_call_trace,
+            traces: Vec::new(),
+            logs: Vec::new(),
+            override_addresses: HashMap::with_capacity(32),
+        };
+
+        // builder = builder.with_external_context(inspector);
 
         let exe = Evm::builder()
             .modify_env(|e| *e = Box::new(env.clone()))
             .with_db(db.clone())
+            .with_external_context(inspector)
             .build();
         let tinyevm = Self {
             exe: Some(exe),
@@ -598,6 +589,23 @@ impl TinyEVM {
         };
 
         Ok(tinyevm)
+    }
+}
+
+impl Default for TinyEVM {
+    fn default() -> Self {
+        Self::new_instance(None, None, false).unwrap()
+    }
+}
+
+// Implementations for use in Python and Rust
+#[pymethods]
+impl TinyEVM {
+    /// Create a new TinyEVM instance
+    #[new]
+    #[pyo3(signature = (fork_url = None, block_id = None))]
+    pub fn new(fork_url: Option<String>, block_id: Option<u64>) -> Result<Self> {
+        Self::new_instance(fork_url, block_id, false)
     }
 
     /// Get addresses loaded remotely as string

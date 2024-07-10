@@ -40,18 +40,18 @@ pub struct Log {
 
 /// An inspector that collects call traces.
 #[derive(Debug)]
-pub struct LogsInspector<'a> {
+pub struct LogsInspector {
     /// Traced enabled?
     pub trace_enabled: bool,
     /// The collected traces
-    pub traces: &'a mut Vec<CallTrace>,
+    pub traces: Vec<CallTrace>,
     /// EVM events/logs collected during execution
-    pub logs: &'a mut Vec<Log>,
+    pub logs: Vec<Log>,
     /// Overrides for addresses. Any address created in this map keys will be overriden with the value
-    pub override_addresses: &'a HashMap<Address, Address>,
+    pub override_addresses: HashMap<Address, Address>,
 }
 
-impl<DB> Inspector<DB> for LogsInspector<'_>
+impl<DB> Inspector<DB> for LogsInspector
 where
     DB: Database,
 {
