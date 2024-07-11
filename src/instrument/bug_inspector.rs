@@ -2,7 +2,7 @@ use hashbrown::{HashMap, HashSet};
 use revm::{
     interpreter::{
         opcode::{self},
-        CreateInputs, CreateOutcome, InstructionResult, Interpreter, OpCode,
+        CreateInputs, CreateOutcome, Interpreter, OpCode,
     },
     primitives::{Address, U256},
     Database, EvmContext, Inspector,
@@ -10,6 +10,7 @@ use revm::{
 
 use super::{Bug, BugData, BugType, Heuristics, InstrumentConfig};
 
+#[derive(Default)]
 pub struct BugInspector {
     /// Change the created address to another address
     pub create_address_overrides: HashMap<Address, Address>,

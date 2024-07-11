@@ -39,8 +39,8 @@ pub struct Log {
 }
 
 /// An inspector that collects call traces.
-#[derive(Debug)]
-pub struct LogsInspector {
+#[derive(Debug, Default)]
+pub struct LogInspector {
     /// Traced enabled?
     pub trace_enabled: bool,
     /// The collected traces
@@ -51,7 +51,7 @@ pub struct LogsInspector {
     pub override_addresses: HashMap<Address, Address>,
 }
 
-impl<DB> Inspector<DB> for LogsInspector
+impl<DB> Inspector<DB> for LogInspector
 where
     DB: Database,
 {

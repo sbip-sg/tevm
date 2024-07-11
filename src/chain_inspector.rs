@@ -1,53 +1,47 @@
 use revm::interpreter::{CallInputs, CallOutcome, CreateInputs, CreateOutcome, EOFCreateInputs};
-use revm::primitives::{Address, Log, U256};
+use revm::primitives::Log;
 use revm::{interpreter::Interpreter, Database, EvmContext, Inspector};
 
+use crate::instrument::bug_inspector::BugInspector;
+use crate::logs::LogInspector;
+
 /// A chain of inspectors, ecch inspector will be executed in order.
-pub struct ChainInspector<DB: Database> {
-    /// The inspector which modifies the execution should be placed at the end of the chain.
-    pub inspectors: Vec<Box<dyn Inspector<DB>>>,
+pub struct ChainInspector {
+    pub log_inspector: Option<LogInspector>,
+    pub bug_inspector: Option<BugInspector>,
 }
 
-impl<DB: Database> Default for ChainInspector<DB> {
-    fn default() -> Self {
-        Self {
-            inspectors: Vec::new(),
-        }
-    }
-}
-
-impl<DB: Database> ChainInspector<DB> {
-    pub fn add<I: Inspector<DB> + 'static>(&mut self, inspector: I) {
-        self.inspectors.push(Box::new(inspector));
-    }
-}
-
-impl<DB: Database> Inspector<DB> for ChainInspector<DB> {
-    #[inline]
-    fn initialize_interp(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
-        for inspector in self.inspectors.iter_mut() {
-            inspector.initialize_interp(interp, context);
-        }
-    }
+impl<DB: Database> Inspector<DB> for ChainInspector {
+    // #[inline]
+    // fn initialize_interp(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {}
 
     #[inline]
     fn step(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
-        for inspector in self.inspectors.iter_mut() {
-            inspector.step(interp, context);
+        if let Some(ins) = self.log_inspector.as_mut() {
+            ins.step(interp, context);
+        }
+        if let Some(ins) = self.bug_inspector.as_mut() {
+            ins.step(interp, context);
         }
     }
 
     #[inline]
     fn step_end(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
-        for inspector in self.inspectors.iter_mut() {
-            inspector.step_end(interp, context);
+        if let Some(ins) = self.log_inspector.as_mut() {
+            ins.step_end(interp, context);
+        }
+        if let Some(ins) = self.bug_inspector.as_mut() {
+            ins.step_end(interp, context);
         }
     }
 
     #[inline]
     fn log(&mut self, context: &mut EvmContext<DB>, log: &Log) {
-        for inspector in self.inspectors.iter_mut() {
-            inspector.log(context, log);
+        if let Some(ins) = self.log_inspector.as_mut() {
+            ins.log(context, log);
+        }
+        if let Some(ins) = self.bug_inspector.as_mut() {
+            ins.log(context, log);
         }
     }
 
@@ -59,12 +53,14 @@ impl<DB: Database> Inspector<DB> for ChainInspector<DB> {
         context: &mut EvmContext<DB>,
         inputs: &mut CallInputs,
     ) -> Option<CallOutcome> {
-        for inspector in self.inspectors.iter_mut() {
-            if let Some(outcome) = inspector.call(context, inputs) {
-                return Some(outcome);
-            }
+        if let Some(ins) = self.log_inspector.as_mut() {
+            ins.call(context, inputs);
         }
-        None
+        if let Some(ins) = self.bug_inspector.as_mut() {
+            ins.call(context, inputs)
+        } else {
+            None
+        }
     }
 
     #[inline]
@@ -75,8 +71,11 @@ impl<DB: Database> Inspector<DB> for ChainInspector<DB> {
         outcome: CallOutcome,
     ) -> CallOutcome {
         let mut outcome = outcome;
-        for inspector in self.inspectors.iter_mut() {
-            outcome = inspector.call_end(context, inputs, outcome);
+        if let Some(ins) = self.log_inspector.as_mut() {
+            outcome = ins.call_end(context, inputs, outcome);
+        }
+        if let Some(ins) = self.bug_inspector.as_mut() {
+            outcome = ins.call_end(context, inputs, outcome);
         }
         outcome
     }
@@ -88,12 +87,14 @@ impl<DB: Database> Inspector<DB> for ChainInspector<DB> {
         context: &mut EvmContext<DB>,
         inputs: &mut CreateInputs,
     ) -> Option<CreateOutcome> {
-        for inspector in self.inspectors.iter_mut() {
-            if let Some(outcome) = inspector.create(context, inputs) {
-                return Some(outcome);
-            }
+        if let Some(ins) = self.log_inspector.as_mut() {
+            ins.create(context, inputs);
         }
-        None
+        if let Some(ins) = self.bug_inspector.as_mut() {
+            ins.create(context, inputs)
+        } else {
+            None
+        }
     }
 
     #[inline]
@@ -104,42 +105,32 @@ impl<DB: Database> Inspector<DB> for ChainInspector<DB> {
         outcome: CreateOutcome,
     ) -> CreateOutcome {
         let mut outcome = outcome;
-        for inspector in self.inspectors.iter_mut() {
-            outcome = inspector.create_end(context, inputs, outcome);
+        if let Some(ins) = self.log_inspector.as_mut() {
+            outcome = ins.create_end(context, inputs, outcome);
+        }
+        if let Some(ins) = self.bug_inspector.as_mut() {
+            outcome = ins.create_end(context, inputs, outcome);
         }
         outcome
     }
 
-    fn eofcreate(
-        &mut self,
-        context: &mut EvmContext<DB>,
-        inputs: &mut EOFCreateInputs,
-    ) -> Option<CreateOutcome> {
-        for inspector in self.inspectors.iter_mut() {
-            if let Some(outcome) = inspector.eofcreate(context, inputs) {
-                return Some(outcome);
-            }
-        }
-        None
-    }
+    // fn eofcreate(
+    //     &mut self,
+    //     context: &mut EvmContext<DB>,
+    //     inputs: &mut EOFCreateInputs,
+    // ) -> Option<CreateOutcome> {
+    //     None
+    // }
 
-    fn eofcreate_end(
-        &mut self,
-        context: &mut EvmContext<DB>,
-        inputs: &EOFCreateInputs,
-        outcome: CreateOutcome,
-    ) -> CreateOutcome {
-        let mut outcome = outcome;
-        for inspector in self.inspectors.iter_mut() {
-            outcome = inspector.eofcreate_end(context, inputs, outcome);
-        }
-        outcome
-    }
+    // fn eofcreate_end(
+    //     &mut self,
+    //     context: &mut EvmContext<DB>,
+    //     inputs: &EOFCreateInputs,
+    //     outcome: CreateOutcome,
+    // ) -> CreateOutcome {
+    //     outcome
+    // }
 
-    #[inline]
-    fn selfdestruct(&mut self, contract: Address, target: Address, value: U256) {
-        for inspector in self.inspectors.iter_mut() {
-            inspector.selfdestruct(contract, target, value);
-        }
-    }
+    // #[inline]
+    // fn selfdestruct(&mut self, contract: Address, target: Address, value: U256) {}
 }

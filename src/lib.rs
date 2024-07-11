@@ -1,4 +1,4 @@
-use crate::{fork_provider::ForkProvider, logs::LogsInspector, response::RevmResult};
+use crate::{fork_provider::ForkProvider, logs::LogInspector, response::RevmResult};
 use ::revm::{
     db::DbAccount,
     primitives::{
@@ -9,6 +9,7 @@ use ::revm::{
 };
 #[cfg(feature = "redis")]
 use cache::redis_cache::RedisProviderCache as DefaultProviderCache;
+use chain_inspector::ChainInspector;
 use hashbrown::{HashMap, HashSet};
 
 #[cfg(not(feature = "redis"))]
@@ -43,7 +44,7 @@ mod logs;
 pub mod response;
 pub use common::*;
 use hex::ToHex;
-use instrument::{BugData, Heuristics, InstrumentConfig};
+use instrument::{bug_inspector::BugInspector, BugData, Heuristics, InstrumentConfig};
 use ruint::aliases::U256;
 use std::{cell::Cell, env, str::FromStr};
 use tracing::{debug, info, trace};
@@ -85,7 +86,7 @@ pub struct TinyEvmContext {}
 #[pyclass(unsendable)]
 pub struct TinyEVM {
     /// REVM instance
-    pub exe: Option<Evm<'static, LogsInspector, TinyEvmDb>>,
+    pub exe: Option<Evm<'static, ChainInspector, TinyEvmDb>>,
     pub owner: Address,
     /// Snapshots of account state
     pub snapshots: HashMap<Address, DbAccount>,
@@ -568,11 +569,16 @@ impl TinyEVM {
 
         db.insert_account_info(owner, account);
         // let mut builder = Evm::builder();
-        let inspector = LogsInspector {
+        let log_inspector = LogInspector {
             trace_enabled: enable_call_trace,
-            traces: Vec::new(),
-            logs: Vec::new(),
-            override_addresses: HashMap::with_capacity(32),
+            ..LogInspector::default()
+        };
+
+        let bug_inspector = BugInspector::default();
+
+        let inspector = ChainInspector {
+            log_inspector: Some(log_inspector),
+            bug_inspector: Some(bug_inspector),
         };
 
         // builder = builder.with_external_context(inspector);
