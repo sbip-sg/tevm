@@ -47,8 +47,6 @@ pub struct LogInspector {
     pub traces: Vec<CallTrace>,
     /// EVM events/logs collected during execution
     pub logs: Vec<Log>,
-    /// Overrides for addresses. Any address created in this map keys will be overriden with the value
-    pub override_addresses: HashMap<Address, Address>,
 }
 
 impl<DB> Inspector<DB> for LogInspector
@@ -139,21 +137,5 @@ where
         }
 
         result
-    }
-
-    #[inline]
-    fn create_end(
-        &mut self,
-        _context: &mut EvmContext<DB>,
-        _inputs: &CreateInputs,
-        outcome: CreateOutcome,
-    ) -> CreateOutcome {
-        let CreateOutcome { result, address } = outcome;
-        if let Some(address) = address {
-            if let Some(override_address) = self.override_addresses.get(&address) {
-                return CreateOutcome::new(result, Some(*override_address));
-            }
-        }
-        CreateOutcome::new(result, address)
     }
 }

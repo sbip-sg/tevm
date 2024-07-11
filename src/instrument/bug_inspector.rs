@@ -7,6 +7,7 @@ use revm::{
     primitives::{Address, U256},
     Database, EvmContext, Inspector,
 };
+use tracing::{debug, warn};
 
 use super::{Bug, BugData, BugType, Heuristics, InstrumentConfig};
 
@@ -442,17 +443,30 @@ where
     #[inline]
     fn create_end(
         &mut self,
-        _context: &mut EvmContext<DB>,
+        context: &mut EvmContext<DB>,
         _inputs: &CreateInputs,
         outcome: CreateOutcome,
     ) -> CreateOutcome {
-        let CreateOutcome { result, address } = outcome;
+        let CreateOutcome { result, address } = &outcome;
         if let Some(address) = address {
-            if let Some(override_address) = self.create_address_overrides.get(&address) {
-                return CreateOutcome::new(result, Some(*override_address));
+            if let Some(override_address) = self.create_address_overrides.get(address) {
+                debug!(
+                    "Overriding created address {:?} with {:?}",
+                    address, override_address
+                );
+                let state = &mut context.journaled_state.state;
+                if let Some(value) = state.remove(address) {
+                    state.insert(*override_address, value);
+                } else {
+                    warn!(
+                        "Contract created but no state associated with it? Contract address: {:?}",
+                        address
+                    );
+                }
+                return CreateOutcome::new(result.to_owned(), Some(*override_address));
             }
         }
-        CreateOutcome::new(result, address)
+        outcome
     }
 }
 

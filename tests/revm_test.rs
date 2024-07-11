@@ -397,6 +397,7 @@ fn test_deterministic_deploy() {
 
 #[test]
 fn test_deterministic_deploy_overwrite() -> Result<()> {
+    let _ = enable_tracing();
     let contract_deploy_hex = include_str!("../tests/contracts/coverage.hex");
     let contract_deploy_bin = hex::decode(contract_deploy_hex).unwrap();
     let target_address = Address::from_slice(H160::random().as_bytes());
@@ -427,6 +428,7 @@ fn test_deterministic_deploy_overwrite() -> Result<()> {
 
     let c1_code = {
         let accounts = &vm.exe.as_ref().unwrap().db().accounts;
+        println!("accounts: {:?}", accounts);
         let account = accounts
             .get(&target_address)
             .context("Expecting first account has non nil value")?;
@@ -450,9 +452,11 @@ fn test_deterministic_deploy_overwrite() -> Result<()> {
         c2
     );
 
+    let c2_address = Address::from_slice(&c2.data);
+
     assert_eq!(
-        c1.data, c2.data,
-        "Deploy same contract with same salt should have same address"
+        c1_address, c2_address,
+        "Deploy same contract to the same forced addess should result in the same address"
     );
 
     let c2_code = {

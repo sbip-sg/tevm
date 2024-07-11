@@ -254,19 +254,27 @@ impl TinyEVM {
             tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
         }
 
-        let nonce = self.exe.as_ref().unwrap().tx().nonce.unwrap_or_default();
+        // todo_cl this is read from global state, might be wrong
+        let nonce = self
+            .exe
+            .as_ref()
+            .unwrap()
+            .context
+            .evm
+            .db
+            .accounts
+            .get(&owner)
+            .map_or(0, |a| a.info.nonce);
         let address = owner.create(nonce);
 
         debug!("Calculated addresss: {:?}", address);
 
-        // todo add the inspector to the exe
-
+        if let Some(force_address) = force_address {
+            self.bug_inspector_mut()
+                .create_address_overrides
+                .insert(address, force_address);
+        }
         let result = self.exe.as_mut().unwrap().transact_commit();
-
-        // if let Some(force_address) = force_address {
-        //     override_addresses.insert(address, force_address);
-        //     self.clone_account(address, force_address, true)?;
-        // }
 
         // debug!("db {:?}", self.exe.as_ref().unwrap().db());
         // debug!("sender {:?}", owner.encode_hex::<String>(),);
@@ -292,11 +300,6 @@ impl TinyEVM {
         };
 
         if collision {
-            info!(
-                "Found address collision, reset the existing account: {}",
-                address.encode_hex::<String>()
-            );
-
             return Err(eyre!(
                 "Address collision for {}",
                 address.encode_hex::<String>()
@@ -332,9 +335,9 @@ impl TinyEVM {
             ignored_addresses: Default::default(),
         };
         let mut resp: Response = revm_result.into();
-        if let Some(force_address) = force_address {
-            resp.data = force_address.0.to_vec();
-        }
+        // if let Some(force_address) = force_address {
+        //     resp.data = force_address.0.to_vec();
+        // }
         Ok(resp)
     }
 
