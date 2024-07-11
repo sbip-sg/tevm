@@ -62,21 +62,46 @@ impl std::fmt::Display for Bug {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "with-serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MissedBranch {
-    /// Previous program counter
-    // pub prev_pc: usize,
+    // The pc imediately before the conditional jumpi
     pub prev_pc: usize,
-    /// Missed program counter
-    pub pc: usize,
+    /// Condition of the jumpi, true jump to `dest_pc`, false jump to `prev_pc + 1`
+    pub cond: bool,
+    /// Destination pc if condition is true
+    pub dest_pc: usize,
     /// Distiance required to reach the missed branch
     pub distance: U256,
+    /// Address of the contract in which this operation is executed
+    pub address_index: isize,
 }
 
-impl From<(usize, usize, U256)> for MissedBranch {
-    fn from((prev_pc, pc, distance): (usize, usize, U256)) -> Self {
+impl MissedBranch {
+    pub fn new(
+        prev_pc: usize,
+        dest_pc: usize,
+        cond: bool,
+        distance: U256,
+        address_index: isize,
+    ) -> Self {
         Self {
             prev_pc,
-            pc,
+            dest_pc,
+            cond,
             distance,
+            address_index,
+        }
+    }
+}
+
+impl From<(usize, usize, bool, U256, isize)> for MissedBranch {
+    fn from(
+        (prev_pc, dest_pc, cond, distance, address_index): (usize, usize, bool, U256, isize),
+    ) -> Self {
+        Self {
+            prev_pc,
+            dest_pc,
+            cond,
+            distance,
+            address_index,
         }
     }
 }
@@ -134,30 +159,28 @@ impl Heuristics {
     }
 
     /// Record missing branch data
-    pub fn record_missed_branch(&mut self, missed_pc: usize) {
-        let prev_pc = self.coverage.back();
-        if prev_pc.is_none() {
-            return;
-        }
-
-        let prev_pc = prev_pc.unwrap();
-        let pc = missed_pc;
+    pub fn record_missed_branch(
+        &mut self,
+        prev_pc: usize,
+        dest_pc: usize,
+        cond: bool,
+        address_index: isize,
+    ) {
         let distance = self.distance;
 
         if self.missed_branches.iter_mut().any(|x| {
-            if x.pc == pc && x.prev_pc == *prev_pc {
-                if distance != x.distance {
-                    x.distance = distance
-                }
-                true
-            } else {
-                false
-            }
+            matches!(x, MissedBranch { prev_pc: p, dest_pc: d, distance: dist, .. } if *p == prev_pc && *d == dest_pc && *dist == distance)
         }) {
             return;
         }
 
-        self.missed_branches.push((*prev_pc, pc, distance).into());
+        self.missed_branches.push(MissedBranch::new(
+            prev_pc,
+            dest_pc,
+            cond,
+            distance,
+            address_index,
+        ));
         // if self.missed_branchs.len() > 2 {
         //     self.missed_branchs.drain(0..self.missed_branchs.len() - 2);
         // }

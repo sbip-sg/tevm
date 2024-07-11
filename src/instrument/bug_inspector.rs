@@ -28,9 +28,24 @@ pub struct BugInspector {
     inputs: Vec<U256>,
     /// Current opcode
     opcode: u8,
+    /// Current index in the execution. For tracking peephole optimized if-statement
+    step_index: u64,
+    last_index_sub: u64,
+    last_index_eq: u64,
 }
 
 impl BugInspector {
+    pub fn inc_step_index(&mut self) {
+        self.step_index += 1;
+    }
+
+    /// Returns true if this is possible peephole optimized code,
+    /// assuming when calling this function the current opcode is
+    /// JUMPI
+    pub fn possibly_if_equal(&self) -> bool {
+        self.step_index < self.last_index_sub + 10 && self.step_index > self.last_index_eq + 10
+    }
+
     fn record_seen_address(&mut self, address: Address) -> isize {
         // make sure target_address is the first address added
         if self.instrument_config.record_branch_for_target_only {
@@ -112,27 +127,60 @@ where
         self.opcode = interp.current_opcode();
         let opcode = OpCode::new(self.opcode);
 
-        // it's possible to handle REVERT, INVALID here
-        if let Some(
-            OpCode::ADD
-            | OpCode::SUB
-            | OpCode::MUL
-            | OpCode::DIV
-            | OpCode::SDIV
-            | OpCode::SMOD
-            | OpCode::ADDMOD
-            | OpCode::MULMOD
-            | OpCode::EXP,
-        ) = opcode
-        {
-            self.inputs.clear();
-            let a = interp.stack().peek(0);
-            let b = interp.stack().peek(1);
-            if let (Ok(a), Ok(b)) = (a, b) {
-                self.inputs.push(a);
-                self.inputs.push(b);
-            }
+        if let Some(OpCode::EQ) = opcode {
+            self.last_index_eq = self.step_index;
         }
+
+        if let Some(OpCode::SUB) = opcode {
+            self.last_index_sub = self.step_index;
+        }
+
+        // it's also possible to handle REVERT, INVALID here
+
+        match opcode {
+            Some(
+                OpCode::JUMPI
+                // possible overflows / underflows
+                | OpCode::ADD
+                | OpCode::SUB
+                | OpCode::MUL
+                | OpCode::DIV
+                | OpCode::SDIV
+                | OpCode::SMOD
+                | OpCode::EXP
+                // heuristic distance
+                | OpCode::LT
+                | OpCode::SLT
+                | OpCode::GT
+                | OpCode::SGT
+                | OpCode::EQ
+                // possible truncation
+                | OpCode::AND
+            ) => {
+                self.inputs.clear();
+                let a = interp.stack().peek(0);
+                let b = interp.stack().peek(1);
+                if let (Ok(a), Ok(b)) = (a, b) {
+                    self.inputs.push(a);
+                    self.inputs.push(b);
+                }
+            },
+            Some( OpCode::ADDMOD | OpCode::MULMOD) => {
+                self.inputs.clear();
+                let a = interp.stack().peek(0);
+                let b = interp.stack().peek(1);
+                let n = interp.stack().peek(2);
+
+                if let (Ok(a), Ok(b), Ok(n)) = (a, b, n) {
+                    self.inputs.push(a);
+                    self.inputs.push(b);
+                    self.inputs.push(n);
+                }
+            }
+            _ => {}
+        }
+
+        self.inc_step_index();
     }
 
     #[inline]
@@ -194,6 +242,169 @@ where
             }
             (opcode::EXP, true) => {
                 // todo_cl check for overflow
+                if let (Some(a), Some(b), Ok(r)) = (
+                    self.inputs.first(),
+                    self.inputs.get(1),
+                    interp.stack().peek(0),
+                ) {
+                    if exp_overflow(*a, *b, r) {
+                        let bug = Bug::new(BugType::IntegerOverflow, opcode, pc, address_index);
+                        self.add_bug(bug);
+                    }
+                }
+            }
+            (opcode::LT, true) => {
+                if let (Some(a), Some(b)) = (self.inputs.first(), self.inputs.get(1)) {
+                    let distance = if a >= b {
+                        a.overflowing_sub(*b).0.saturating_add(U256::from(1))
+                    } else {
+                        b.overflowing_sub(*a).0
+                    };
+                    self.heuristics.distance = distance;
+                }
+            }
+            (opcode::GT, true) => {
+                if let (Some(a), Some(b)) = (self.inputs.first(), self.inputs.get(1)) {
+                    let distance = if a >= b {
+                        a.overflowing_sub(*b).0
+                    } else {
+                        b.overflowing_sub(*a).0.saturating_add(U256::from(1))
+                    };
+                    self.heuristics.distance = distance;
+                }
+            }
+            (opcode::SLT, true) => {
+                if let (Some(a), Some(b), Ok(r)) = (
+                    self.inputs.first(),
+                    self.inputs.get(1),
+                    interp.stack().peek(0),
+                ) {
+                    let mut distance = if a >= b {
+                        a.overflowing_sub(*b).0
+                    } else {
+                        b.overflowing_sub(*a).0
+                    };
+                    if r == U256::ZERO {
+                        distance = distance.saturating_add(U256::from(1));
+                    }
+                    self.heuristics.distance = distance;
+                }
+            }
+            (opcode::SGT, true) => {
+                if let (Some(a), Some(b), Ok(r)) = (
+                    self.inputs.first(),
+                    self.inputs.get(1),
+                    interp.stack().peek(0),
+                ) {
+                    let mut distance = if a >= b {
+                        a.overflowing_sub(*b).0
+                    } else {
+                        b.overflowing_sub(*a).0
+                    };
+                    if r == U256::ZERO {
+                        distance = distance.saturating_add(U256::from(1));
+                    }
+                    self.heuristics.distance = distance;
+                }
+            }
+            (opcode::EQ, true) => {
+                if let (Some(a), Some(b), Ok(r)) = (
+                    self.inputs.first(),
+                    self.inputs.get(1),
+                    interp.stack().peek(0),
+                ) {
+                    let mut distance = if a >= b {
+                        a.overflowing_sub(*b).0
+                    } else {
+                        b.overflowing_sub(*a).0
+                    };
+                    if r == U256::ZERO {
+                        distance = distance.saturating_add(U256::from(1));
+                    }
+                    self.heuristics.distance = distance;
+                }
+            }
+            (opcode::AND, true) => {
+                if let (Some(a), Some(b)) = (self.inputs.first(), self.inputs.get(1)) {
+                    // check if there is an possible truncation
+
+                    // For AND operator, if either side of the operands equals
+                    // u8, u16, ..., and the other side is larger than this
+                    // operand, generate possible integer truncation signal
+                    let mut i = 1;
+                    let possible_overflow = loop {
+                        if i == 32 {
+                            break false;
+                        }
+
+                        let r = U256::MAX >> (i * 8);
+
+                        if r == *a && b > a {
+                            break true;
+                        }
+
+                        if r == *b && a > b {
+                            break true;
+                        }
+                        i += 1;
+                    };
+                    if possible_overflow {
+                        let bug = Bug::new(
+                            BugType::PossibleIntegerTruncation,
+                            opcode,
+                            pc,
+                            address_index,
+                        );
+                        self.add_bug(bug);
+                    }
+                }
+            }
+            (opcode::JUMPI, true) => {
+                // Check for missed branches
+                let target_address = self.instrument_config.target_address;
+                macro_rules! update_heuritics {
+                    // (prev_pc, dest_pc_if_cond_is_true, cond)
+                    ($prev_pc: ident, $dest_pc: expr, $cond: expr) => {
+                        if !self.instrument_config.record_branch_for_target_only
+                            || address == target_address
+                        {
+                            let heuristics = &mut self.heuristics;
+                            heuristics.record_missed_branch(
+                                $prev_pc,
+                                $dest_pc,
+                                $cond,
+                                address_index,
+                            );
+                            let target = if $cond { $dest_pc } else { $prev_pc + 1 };
+                            let bug =
+                                Bug::new(BugType::Jumpi(target), opcode, $prev_pc, address_index);
+                            self.add_bug(bug);
+                        }
+                    };
+                }
+
+                // NOTE: invalid jumps are ignored
+                if let (Some(dest), Some(value)) = (self.inputs.first(), self.inputs.get(1)) {
+                    // Check for distance in peephole optimized if-statement
+                    if self.possibly_if_equal() {
+                        let max = U256::MAX;
+                        let mut half = U256::MAX;
+                        half.set_bit(31, false);
+                        let h = &mut self.heuristics;
+                        h.distance = {
+                            // smallest distance from the `value` to U256::MAX and 0
+                            if *value > half {
+                                max - value + U256::from(1)
+                            } else {
+                                *value
+                            }
+                        };
+                    }
+
+                    let dest = usize::try_from(dest).unwrap();
+                    let cond = *value != U256::ZERO;
+                    update_heuritics!(pc, dest, cond);
+                }
             }
             (opcode::BLOBHASH, _) => {
                 let bug = Bug::new(BugType::BlockValueDependency, opcode, pc, address_index);
@@ -215,6 +426,7 @@ where
                 let bug = Bug::new(BugType::BlockValueDependency, opcode, pc, address_index);
                 self.add_bug(bug);
             }
+
             (opcode::REVERT | opcode::INVALID, _) => {
                 let bug = Bug::new(BugType::RevertOrInvalid, opcode, pc, address_index);
                 self.add_bug(bug);
@@ -248,4 +460,25 @@ fn mul_overflow(a: U256, b: U256) -> bool {
     } else {
         a > U256::MAX.wrapping_div(b)
     }
+}
+
+fn exp_overflow(a: U256, b: U256, r: U256) -> bool {
+    let max_value: U256 = U256::MAX;
+    let mut result: U256 = U256::from(1u64);
+
+    if b == U256::ZERO {
+        return r != U256::from(1u64);
+    }
+
+    let mut i = U256::ZERO;
+
+    while i < b {
+        if result > max_value / a {
+            return true;
+        }
+        result *= a;
+        i += U256::from(1u64);
+    }
+
+    result != r
 }
