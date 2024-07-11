@@ -60,8 +60,6 @@ pub struct ForkDB<T: ProviderCache> {
 
     /// Optional instrument config
     pub instrument_config: Option<InstrumentConfig>,
-    /// Instrument data collected
-    pub instrument_data: InstrumentData,
 }
 
 impl Clone for ForkDB<FileSystemProviderCache> {
@@ -78,7 +76,6 @@ impl Clone for ForkDB<FileSystemProviderCache> {
             ignored_addresses: self.ignored_addresses.clone(),
             max_fork_depth: self.max_fork_depth,
             instrument_config: self.instrument_config.clone(),
-            instrument_data: self.instrument_data.clone(),
         }
     }
 }
@@ -157,7 +154,6 @@ impl<T: ProviderCache> ForkDB<T> {
             ignored_addresses: Default::default(),
             max_fork_depth,
             instrument_config: Some(InstrumentConfig::default()),
-            instrument_data: InstrumentData::default(),
         }
     }
 

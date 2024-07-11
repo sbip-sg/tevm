@@ -219,6 +219,7 @@ fn single_bugtype_test_helper(
 
 #[test]
 fn test_overflow() {
+    let _ = enable_tracing();
     let u256_max_as_hex = format!("{:#x}", U256::MAX);
     let contract_hex = include_str!("../tests/contracts/IntegerOverflowAdd_deploy.hex");
     let num_runs = 1;
@@ -1006,10 +1007,9 @@ fn test_get_set_balance() {
     let balance = vm.get_eth_balance(owner).unwrap();
     assert_eq!(UZERO, balance, "Expect empty account has zero balance");
 
-    vm.set_account_balance(owner.into(), target_balance)
-        .unwrap();
+    vm.set_account_balance(owner, target_balance).unwrap();
 
-    let balance = vm.get_eth_balance(owner.into()).unwrap();
+    let balance = vm.get_eth_balance(owner).unwrap();
     assert_eq!(
         balance, target_balance,
         "Expect changed to the target balance"
@@ -1024,7 +1024,7 @@ fn test_get_set_balance() {
     assert!(resp.success, "Deployment should succeed");
     let addr = Address::from_slice(&resp.data);
 
-    vm.set_account_balance(addr.into(), target_balance).unwrap();
+    vm.set_account_balance(addr, target_balance).unwrap();
 
     let bin = hex::decode(fn_sig_to_prefix("selfbalance()")).unwrap();
     let resp = vm.contract_call_helper(addr, owner, bin, UZERO, None);
@@ -1102,10 +1102,7 @@ fn test_seen_pcs() {
     );
     assert!(resp.success, "Call error {:?}", resp);
 
-    let seen_pcs = &vm
-        .instrument_data()
-        .pcs_by_address
-        .get(&Address::new(address.0));
+    let seen_pcs = &vm.pcs_by_address().get(&Address::new(address.0));
     assert!(
         seen_pcs.is_some(),
         "Seen PCs should be found for the target contract "
@@ -1120,13 +1117,6 @@ fn test_seen_pcs() {
 fn test_runtime_configuration() {
     deploy_hex!("../tests/contracts/contract_creation_B.hex", vm, address);
     let address = Address::new(address.0);
-
-    let config = InstrumentConfig {
-        pcs_by_address: false,
-        ..Default::default()
-    };
-
-    // vm.db.instrument_config = Some(config);
 
     vm.set_account_balance(
         *OWNER,
@@ -1145,7 +1135,7 @@ fn test_runtime_configuration() {
     );
     assert!(resp.success, "Call error {:?}", resp);
 
-    let seen_pcs = &vm.instrument_data().pcs_by_address.get(&address);
+    let seen_pcs = &vm.pcs_by_address().get(&address);
     assert!(
         seen_pcs.is_none() || seen_pcs.unwrap().is_empty(),
         "No PCs by address should be recorded"

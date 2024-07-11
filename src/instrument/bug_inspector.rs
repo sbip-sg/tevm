@@ -7,6 +7,7 @@ use revm::{
     primitives::{Address, U256},
     Database, EvmContext, Inspector,
 };
+use tracing::debug;
 
 use super::{Bug, BugData, BugType, Heuristics, InstrumentConfig};
 
@@ -185,11 +186,13 @@ where
     }
 
     #[inline]
-    fn step_end(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
+    fn step_end(&mut self, interp: &mut Interpreter, _context: &mut EvmContext<DB>) {
         let address = interp.contract().target_address;
         let address_index = self.record_seen_address(address);
         let pc = interp.program_counter();
         let opcode = self.opcode;
+
+        debug!("Step end {}", opcode);
 
         if self.instrument_config.pcs_by_address {
             self.record_pc(address, pc);

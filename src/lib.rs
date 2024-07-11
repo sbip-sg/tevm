@@ -18,7 +18,7 @@ use cache::filesystem_cache::FileSystemProviderCache as DefaultProviderCache;
 use dotenv::dotenv;
 use ethers_providers::{Http, Provider};
 use eyre::{eyre, ContextCompat, Result};
-use fork_db::{ForkDB, InstrumentData};
+use fork_db::ForkDB;
 use lazy_static::lazy_static;
 use num_bigint::BigInt;
 use pyo3::prelude::*;
@@ -46,7 +46,7 @@ pub use common::*;
 use hex::ToHex;
 use instrument::{bug_inspector::BugInspector, BugData, Heuristics, InstrumentConfig};
 use ruint::aliases::U256;
-use std::{cell::Cell, env, str::FromStr};
+use std::{cell::Cell, str::FromStr};
 use tracing::{debug, info, trace};
 
 lazy_static! {
@@ -120,24 +120,53 @@ pub fn enable_tracing() -> Result<()> {
 
 // Implementations for use in Rust
 impl TinyEVM {
-    pub fn instrument_data(&self) -> &InstrumentData {
-        &self.exe.as_ref().unwrap().context.evm.db.instrument_data
+    fn log_inspector(&self) -> &LogInspector {
+        self.exe
+            .as_ref()
+            .unwrap()
+            .context
+            .external
+            .log_inspector
+            .as_ref()
+            .unwrap()
+    }
+
+    fn bug_inspector(&self) -> &BugInspector {
+        self.exe
+            .as_ref()
+            .unwrap()
+            .context
+            .external
+            .bug_inspector
+            .as_ref()
+            .unwrap()
+    }
+
+    fn bug_inspector_mut(&mut self) -> &mut BugInspector {
+        self.exe
+            .as_mut()
+            .unwrap()
+            .context
+            .external
+            .bug_inspector
+            .as_mut()
+            .unwrap()
     }
 
     pub fn bug_data(&self) -> &BugData {
-        &self.instrument_data().bug_data
+        &self.bug_inspector().bug_data
     }
 
     pub fn heuristics(&self) -> &Heuristics {
-        &self.instrument_data().heuristics
+        &self.bug_inspector().heuristics
     }
 
     pub fn pcs_by_address(&self) -> &HashMap<Address, HashSet<usize>> {
-        &self.instrument_data().pcs_by_address
+        &self.bug_inspector().pcs_by_address
     }
 
     pub fn created_addresses(&self) -> &Vec<Address> {
-        &self.instrument_data().created_addresses
+        &self.bug_inspector().created_addresses
     }
 
     /// Create a new TinyEVM instance without fork
@@ -185,7 +214,7 @@ impl TinyEVM {
         let db = &mut self.exe.as_mut().unwrap().context.evm.db;
         db.accounts.remove(&addr);
 
-        let managed_addresses = &mut db.instrument_data.managed_addresses;
+        let managed_addresses = &mut self.bug_inspector_mut().managed_addresses;
         managed_addresses.remove(&addr);
 
         Ok(())
@@ -213,23 +242,15 @@ impl TinyEVM {
         // Reset instrumentation,
         self.clear_instrumentation();
 
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
+        self.bug_inspector_mut().pcs_by_address.clear(); // If don't want to trace the deploy PCs
 
-        db.instrument_data.pcs_by_address.clear(); // If don't want to trace the deploy PCs
-
-        if let Some(exe) = self.exe.take() {
-            let exe = exe
-                .modify()
-                .modify_tx_env(|tx| {
-                    tx.caller = owner;
-                    tx.transact_to = TransactTo::Create;
-                    tx.data = contract_bytecode.clone().into();
-                    tx.value = value;
-                    tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
-                })
-                .modify_cfg_env(|env| env.limit_contract_code_size = Some(0x24000))
-                .build();
-            self.exe = Some(exe);
+        {
+            let tx = self.exe.as_mut().unwrap().tx_mut();
+            tx.caller = owner;
+            tx.transact_to = TransactTo::Create;
+            tx.data = contract_bytecode.clone().into();
+            tx.value = value;
+            tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
         }
 
         let nonce = self.exe.as_ref().unwrap().tx().nonce.unwrap_or_default();
@@ -290,16 +311,13 @@ impl TinyEVM {
             addresses, address
         );
         if !addresses.is_empty() {
-            self.exe
-                .as_mut()
-                .unwrap()
-                .context
-                .evm
-                .db
-                .instrument_data
+            self.bug_inspector_mut()
                 .managed_addresses
                 .insert(address, addresses);
         }
+
+        let logs = self.log_inspector().logs.clone();
+        let traces = self.log_inspector().traces.clone();
 
         trace!("deploy result: {:?}", result);
 
@@ -308,8 +326,8 @@ impl TinyEVM {
             bug_data,
             heuristics,
             seen_pcs,
-            transient_logs: vec![],
-            traces: vec![],
+            traces,
+            transient_logs: logs,
             ignored_addresses: Default::default(),
         };
         let mut resp: Response = revm_result.into();
@@ -336,18 +354,13 @@ impl TinyEVM {
         debug!("db in contract_call: {:?}", self.exe.as_ref().unwrap().db());
         debug!("sender {:?}", sender.encode_hex::<String>(),);
 
-        if let Some(exe) = self.exe.take() {
-            let exe = exe
-                .modify()
-                .modify_tx_env(|tx| {
-                    tx.caller = sender;
-                    tx.transact_to = TransactTo::Call(contract);
-                    tx.data = data.into();
-                    tx.value = value;
-                    tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
-                })
-                .build();
-            self.exe = Some(exe);
+        {
+            let tx = self.exe.as_mut().unwrap().tx_mut();
+            tx.caller = sender;
+            tx.transact_to = TransactTo::Call(contract);
+            tx.data = data.into();
+            tx.value = value;
+            tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
         }
 
         // let mut traces = vec![];
@@ -378,11 +391,7 @@ impl TinyEVM {
         debug!("contract_call result: {:?}", result);
 
         if !addresses.is_empty() {
-            let exe = self.exe.as_mut().unwrap();
-            exe.context
-                .evm
-                .db
-                .instrument_data
+            self.bug_inspector_mut()
                 .managed_addresses
                 .insert(contract, addresses);
         }
@@ -391,15 +400,17 @@ impl TinyEVM {
         let ignored_addresses = db.ignored_addresses.clone();
         let ignored_addresses = ignored_addresses.into_iter().map(Into::into).collect();
 
-        // let logs = self.exe.as_ref().unwrap().context.external;
+        let log_inspector = self.log_inspector();
+        let logs = log_inspector.logs.clone();
+        let traces = log_inspector.traces.clone();
 
         let revm_result = RevmResult {
             result: result.map_err(|e| eyre!(e)),
             bug_data,
             heuristics,
             seen_pcs,
-            transient_logs: Vec::new(), // todo logs,
-            traces: Vec::new(),         // todo
+            traces,
+            transient_logs: logs,
             ignored_addresses,
         };
         revm_result.into()
@@ -1074,10 +1085,10 @@ impl TinyEVM {
     }
 
     pub fn clear_instrumentation(&mut self) {
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
-        db.instrument_data.bug_data.clear();
-        db.instrument_data.created_addresses.clear();
-        db.instrument_data.heuristics = Default::default();
+        let bug_inspector = self.bug_inspector_mut();
+        bug_inspector.bug_data.clear();
+        bug_inspector.created_addresses.clear();
+        bug_inspector.heuristics = Default::default();
     }
 
     /// Restore a snapshot for an account, raise error if there is no snapshot for the account
