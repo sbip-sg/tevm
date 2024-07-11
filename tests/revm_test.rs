@@ -466,55 +466,82 @@ fn test_deterministic_deploy_overwrite() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_heuristics() {
-    deploy_hex!("../tests/contracts/heuristics.hex", vm, address);
+fn test_heuristics_inner(
+    input: u64,                                  // `i` in the function `coverage(uint256 i)`
+    expected_missed_branches: Vec<MissedBranch>, // expected list of jumpi
+    expected_coverages: Vec<usize>,              // expected list of coverage PCs
+) {
+    deploy_hex!("../tests/contracts/heuristics.hex", exe, address);
 
     let fn_sig = "coverage(uint256)";
     let fn_sig_hex = fn_sig_to_prefix(fn_sig);
-    let fn_args_hex = format!("{:0>64x}", U256::from(50));
-
-    let expected_missed_branches: Vec<MissedBranch> = vec![
-        // (prev_pc, pc, distance)
-        (24, 40, 0), // Function signature selection input size check (4 bytes)
-        (45, 61, 1), // Function signature selection
-        (65, 120, 0x26df),
-        (127, 136, 0x33),
-        (143, 152, 0x30),
-    ]
-    .into_iter()
-    .map(|(prev_pc, pc, distance)| (prev_pc, pc, U256::from(distance as u64)).into())
-    .collect();
+    let fn_args_hex = format!("{:0>64x}", U256::from(input));
 
     let fn_hex = format!("{}{}", fn_sig_hex, fn_args_hex);
 
     let tx_data = hex::decode(fn_hex).unwrap();
 
-    let resp = vm.contract_call_helper(Address::new(address.0), *OWNER, tx_data, UZERO, None);
+    let resp = exe.contract_call_helper(Address::new(address.0), *OWNER, tx_data, UZERO, None);
 
-    assert!(resp.success, "Transaction should succeed.");
+    assert!(
+        resp.success,
+        "Transaction should succeed with input {}",
+        input
+    );
 
     let heuristics = resp.heuristics;
 
-    let missed_branches: Vec<_> = heuristics.missed_branches.into_iter().collect();
-    let coverage: Vec<usize> = heuristics.coverage.into_iter().collect();
-
-    assert_eq!(
-        expected_missed_branches.len(),
-        missed_branches.len(),
-        "All missed branches should be found"
-    );
+    let missed_branches: Vec<_> = heuristics.missed_branches.into_iter().skip(4).collect();
+    let coverage: Vec<usize> = heuristics
+        .coverage
+        .into_iter()
+        .skip(4) // skip 4 from function selector operations
+        .collect();
 
     assert_eq!(
         expected_missed_branches, missed_branches,
-        "All missed branches should be found with expected distances"
+        "All missed branches should be found with expected distances with input {}",
+        input
     );
 
     assert_eq!(
-        coverage,
-        vec![15, 24, 45, 65, 127, 143, 159],
-        "List of coverage PCs should match "
+        expected_coverages, coverage,
+        "List of coverage PCs should match with input {}",
+        input
     );
+}
+
+#[test]
+fn test_heuristics() {
+    // Test coverage(200)
+    let input = 200;
+    let expected_missed_branches: Vec<MissedBranch> = vec![
+        // (prev_pc, pc, is_jump_to_target, distance)
+        // skips 4 from function selector operations
+        (119, 127, true, 0x2649),
+        (135, 143, false, 0x64),
+    ]
+    .into_iter()
+    .map(|(prev_pc, pc, cond, distance)| (prev_pc, pc, cond, U256::from(distance as u64), 0).into())
+    .collect();
+
+    let expected_coverages = vec![127, 136];
+    test_heuristics_inner(input, expected_missed_branches, expected_coverages);
+
+    // Test coverage(50)
+    let input = 50;
+    let expected_missed_branches: Vec<MissedBranch> = vec![
+        // (prev_pc, pc, is_jump_to_target, distance)
+        (119, 127, true, 0x26df),
+        (135, 143, true, 0x33),
+        (151, 159, true, 0x30),
+    ]
+    .into_iter()
+    .map(|(prev_pc, pc, cond, distance)| (prev_pc, pc, cond, U256::from(distance as u64), 0).into())
+    .collect();
+
+    let expected_coverages = vec![127, 143, 159];
+    test_heuristics_inner(input, expected_missed_branches, expected_coverages);
 }
 
 #[test]
@@ -533,14 +560,13 @@ fn test_heuristics_signed_int() {
 
     let expected_missed_branches: Vec<MissedBranch> = vec![
         // (prev_pc, pc, distance)
-        // (26, 43, 0), // skip two from function selector operations
-        // (48, 66, 1),
-        (70, 156, 9950),
-        (195, 236, 51),
-        (275, 316, 48),
+        // skips 4 jumpis: callvalue, calldatasize, selector, calldata argument size check
+        (155, 195, 9950),
+        (235, 275, 51),
+        (315, 355, 48),
     ]
     .into_iter()
-    .map(|(prev_pc, pc, distance)| (prev_pc, pc, U256::from(distance as u64)).into())
+    .map(|(prev_pc, pc, distance)| (prev_pc, pc, true, U256::from(distance as u64), 0).into())
     .collect();
 
     let fn_hex = format!("{}{}", fn_sig_hex, fn_args_hex);
@@ -558,7 +584,7 @@ fn test_heuristics_signed_int() {
         .heuristics
         .missed_branches
         .into_iter()
-        .skip(2)
+        .skip(4)
         .collect();
 
     assert_eq!(
@@ -1342,9 +1368,10 @@ fn test_peephole_optimized_if_equal() {
     let found_missed_branch_at_func1 = resp.heuristics.missed_branches.iter().any(
         |MissedBranch {
              prev_pc,
-             pc,
+             dest_pc,
              distance,
-         }| { (*prev_pc, *pc, *distance) == expected_missed_branches },
+             ..
+         }| { (*prev_pc, *dest_pc, *distance) == expected_missed_branches },
     );
     assert!(
         found_missed_branch_at_func1,
