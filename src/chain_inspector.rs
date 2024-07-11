@@ -1,4 +1,4 @@
-use revm::interpreter::{CallInputs, CallOutcome, CreateInputs, CreateOutcome, EOFCreateInputs};
+use revm::interpreter::{CallInputs, CallOutcome, CreateInputs, CreateOutcome};
 use revm::primitives::Log;
 use revm::{interpreter::Interpreter, Database, EvmContext, Inspector};
 
@@ -12,9 +12,6 @@ pub struct ChainInspector {
 }
 
 impl<DB: Database> Inspector<DB> for ChainInspector {
-    // #[inline]
-    // fn initialize_interp(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {}
-
     #[inline]
     fn step(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
         if let Some(ins) = self.log_inspector.as_mut() {

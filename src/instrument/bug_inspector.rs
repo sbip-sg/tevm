@@ -7,7 +7,6 @@ use revm::{
     primitives::{Address, U256},
     Database, EvmContext, Inspector,
 };
-use tracing::debug;
 
 use super::{Bug, BugData, BugType, Heuristics, InstrumentConfig};
 
@@ -25,11 +24,12 @@ pub struct BugInspector {
     pub created_addresses: Vec<Address>,
     // Managed addresses: contract -> addresses created by any transaction from the contract
     pub managed_addresses: HashMap<Address, Vec<Address>>,
-    pub opcode_index: usize,
     /// Stack inputs of the current opcodes. Only updated when the opcode is interesting
     inputs: Vec<U256>,
     /// Current opcode
     opcode: u8,
+    // Current program counter
+    pc: usize,
     /// Current index in the execution. For tracking peephole optimized if-statement
     step_index: u64,
     last_index_sub: u64,
@@ -128,6 +128,7 @@ where
         let _ = context;
         self.opcode = interp.current_opcode();
         let opcode = OpCode::new(self.opcode);
+        self.pc = interp.program_counter();
 
         if let Some(OpCode::EQ) = opcode {
             self.last_index_eq = self.step_index;
@@ -189,10 +190,8 @@ where
     fn step_end(&mut self, interp: &mut Interpreter, _context: &mut EvmContext<DB>) {
         let address = interp.contract().target_address;
         let address_index = self.record_seen_address(address);
-        let pc = interp.program_counter();
         let opcode = self.opcode;
-
-        debug!("Step end {}", opcode);
+        let pc = self.pc;
 
         if self.instrument_config.pcs_by_address {
             self.record_pc(address, pc);

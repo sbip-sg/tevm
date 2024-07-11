@@ -11,6 +11,7 @@ use ::revm::{
 use cache::redis_cache::RedisProviderCache as DefaultProviderCache;
 use chain_inspector::ChainInspector;
 use hashbrown::{HashMap, HashSet};
+use revm::inspector_handle_register;
 
 #[cfg(not(feature = "redis"))]
 use cache::filesystem_cache::FileSystemProviderCache as DefaultProviderCache;
@@ -379,9 +380,6 @@ impl TinyEVM {
             exe.transact_commit()
         };
 
-        let bug_data = self.bug_data().clone();
-        let heuristics = self.heuristics().clone();
-        let seen_pcs = self.pcs_by_address().clone();
         let addresses = self.created_addresses().clone();
         info!(
             "created addresses from contract call: {:?} for {:?}",
@@ -395,6 +393,10 @@ impl TinyEVM {
                 .managed_addresses
                 .insert(contract, addresses);
         }
+
+        let bug_data = self.bug_data().clone();
+        let heuristics = self.heuristics().clone();
+        let seen_pcs = self.pcs_by_address().clone();
 
         let db = &self.exe.as_ref().unwrap().context.evm.db;
         let ignored_addresses = db.ignored_addresses.clone();
@@ -598,6 +600,7 @@ impl TinyEVM {
             .modify_env(|e| *e = Box::new(env.clone()))
             .with_db(db.clone())
             .with_external_context(inspector)
+            .append_handler_register(inspector_handle_register)
             .build();
         let tinyevm = Self {
             exe: Some(exe),
