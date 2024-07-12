@@ -1,4 +1,5 @@
 use hashbrown::{HashMap, HashSet};
+use primitive_types::H160;
 use revm::{
     interpreter::{opcode, CreateInputs, CreateOutcome, Interpreter, OpCode},
     primitives::{Address, U256},
@@ -143,6 +144,10 @@ where
         match opcode {
             Some(
                 op @ (OpCode::JUMPI
+                | OpCode::CALL
+                | OpCode::CALLCODE
+                | OpCode::DELEGATECALL
+                | OpCode::STATICCALL
                 | OpCode::SSTORE
                 | OpCode::SLOAD
                 | OpCode::ADD
@@ -187,7 +192,8 @@ where
             self.record_pc(address, pc);
         }
 
-        let success = interp.instruction_result.is_ok();
+        let result = &interp.instruction_result;
+        let success = result.is_ok();
 
         // Check for overflow and underflow
         match (opcode, success) {
@@ -374,6 +380,33 @@ where
                     address_index,
                 );
                 self.add_bug(bug);
+            }
+
+            (opcode::CALL, _)
+            | (opcode::CALLCODE, _)
+            | (opcode::DELEGATECALL, _)
+            | (opcode::STATICCALL, _) => {
+                let in_len = {
+                    if self.opcode == opcode::CALL || self.opcode == opcode::CALLCODE {
+                        self.inputs.get(4)
+                    } else {
+                        self.inputs.get(3)
+                    }
+                };
+                let address = self.inputs.get(1);
+
+                if let (Some(in_len), Some(callee)) = (in_len, address) {
+                    let callee_bytes: [u8; 32] = callee.to_be_bytes();
+                    let callee = H160::from_slice(&callee_bytes[12..]);
+                    let in_len = usize::try_from(in_len).unwrap();
+                    let bug = Bug::new(
+                        BugType::Call(in_len, callee),
+                        self.opcode,
+                        self.pc,
+                        address_index,
+                    );
+                    self.add_bug(bug);
+                }
             }
             (opcode::JUMPI, true) => {
                 // Check for missed branches

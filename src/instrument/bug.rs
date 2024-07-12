@@ -8,18 +8,23 @@ use strum_macros::Display;
 pub enum BugType {
     IntegerOverflow,
     IntegerSubUnderflow,
-    IntegerDivByZero, // op2 for DIV, SDIV is zero
-    IntegerModByZero, // op2 for MOD, SMOD, ADDMOD, MULMOD,  is zero
+    /// op2 for DIV, SDIV is zero
+    IntegerDivByZero,
+    /// op2 for MOD, SMOD, ADDMOD, MULMOD,  is zero
+    IntegerModByZero,
     PossibleIntegerTruncation,
     TimestampDependency,
     BlockNumberDependency,
     BlockValueDependency,
     TxOriginDependency,
-    Call(usize, H160), // Call(input_parameter_size, destination_address)
+    /// Call(input_parameter_size, destination_address)
+    Call(usize, H160),
     RevertOrInvalid,
-    Jumpi(usize), // Jumpi(dest)
+    /// Jumpi(dest)
+    Jumpi(usize),
     Sload(U256),
-    Sstore(U256, U256), // index, value
+    /// storage key, value
+    Sstore(U256, U256),
     Unclassified,
 }
 

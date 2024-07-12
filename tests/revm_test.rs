@@ -8,11 +8,11 @@ use primitive_types::{H160, H256};
 use revm::interpreter::opcode::{self, CREATE, CREATE2, SELFDESTRUCT};
 use revm::primitives::Address;
 use ruint::aliases::U256;
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::iter::repeat_with;
 use std::ops::Add;
 use std::str::FromStr;
-use std::{collections::HashSet, env};
 use tinyevm::instrument::bug::{Bug, BugType, MissedBranch};
 
 use tinyevm::{
@@ -84,6 +84,8 @@ fn check_expected_bugs_are_found(expected: Vec<(BugType, usize)>, found: Vec<Bug
         .into_iter()
         .map(|bug| (bug.bug_type, bug.position))
         .collect();
+
+    println!("Found bugs: {:?}", found_bugs);
 
     let diff: HashSet<_> = expected_bugs.difference(&found_bugs).collect();
     assert_eq!(0, diff.len(), "Expected bugs {diff:#?} should be found");
@@ -333,7 +335,8 @@ fn test_tx_origin_v2() {
 
 #[test]
 fn test_call_trace() {
-    deploy_hex!("../tests/contracts/calls_trace.hex", exe, address);
+    setup();
+    deploy_hex!("../tests/contracts/calls_trace.hex", vm, address);
 
     let tests = vec![
         ("always_fail()", vec![(BugType::RevertOrInvalid, 167)], true),
@@ -366,9 +369,9 @@ fn test_call_trace() {
         let fn_hex = fn_sig_to_prefix(fn_sig);
         let data = hex::decode(fn_hex).unwrap();
         let resp =
-            exe.contract_call_helper(Address::new(address.0), *OWNER, data.clone(), UZERO, None);
+            vm.contract_call_helper(Address::new(address.0), *OWNER, data.clone(), UZERO, None);
         assert_eq!(expect_revert, !resp.success);
-        let bugs = &exe.bug_data();
+        let bugs = &vm.bug_data();
         let bugs: Vec<_> = bugs.iter().cloned().collect();
         check_expected_bugs_are_found(expected_bugs, bugs.to_vec());
     }
