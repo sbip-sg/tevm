@@ -1292,6 +1292,7 @@ fn test_seen_addresses() {
 
 #[test]
 fn test_distance_signed() {
+    let _ = enable_tracing();
     deploy_hex!("../tests/contracts/test_distance_signed.hex", vm, address);
     let address = Address::new(address.0);
     let fn_sig = "sign_distance(int256)";
@@ -1326,11 +1327,21 @@ fn test_distance_signed() {
         .map(|b| b.distance)
         .collect::<Vec<_>>();
 
-    println!("Missed branches: {:?}", missed_branches_distance);
+    println!("Missed branches distances: {:?}", missed_branches_distance);
 
-    assert!(expected_distances
+    let failed_to_find = expected_distances
         .iter()
-        .all(|d| { missed_branches_distance.contains(&U256::from(*d)) }));
+        .filter(|d| !(missed_branches_distance.contains(&U256::from(**d))))
+        .collect::<Vec<_>>();
+
+    println!(
+        "Failed to find missed branches distances: {:?}",
+        failed_to_find
+    );
+    assert!(
+        failed_to_find.is_empty(),
+        "All expected distances should be found"
+    );
 }
 
 #[test]
