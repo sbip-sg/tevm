@@ -107,6 +107,10 @@ fn t_erc20_balance_query(vm: &mut TinyEVM, address: Address, expected_balance: U
     assert_eq!(expected_balance, balance);
 }
 
+fn setup() {
+    let _ = enable_tracing();
+}
+
 /// Convenient function create binary for the solidty function: transfer(address,uint256)
 fn make_transfer_bin(to: Address, amount: U256) -> Vec<u8> {
     let prefix = fn_sig_to_prefix("transfer(address,uint256)");
@@ -219,7 +223,7 @@ fn single_bugtype_test_helper(
 
 #[test]
 fn test_overflow() {
-    let _ = enable_tracing();
+    setup();
     let u256_max_as_hex = format!("{:#x}", U256::MAX);
     let contract_hex = include_str!("../tests/contracts/IntegerOverflowAdd_deploy.hex");
     let num_runs = 1;
@@ -397,7 +401,7 @@ fn test_deterministic_deploy() {
 
 #[test]
 fn test_deterministic_deploy_overwrite() -> Result<()> {
-    let _ = enable_tracing();
+    setup();
     let contract_deploy_hex = include_str!("../tests/contracts/coverage.hex");
     let contract_deploy_bin = hex::decode(contract_deploy_hex).unwrap();
     let target_address = Address::from_slice(H160::random().as_bytes());
@@ -518,6 +522,7 @@ fn test_heuristics_inner(
 
 #[test]
 fn test_heuristics() {
+    setup();
     // Test coverage(200)
     let input = 200;
     let expected_missed_branches: Vec<MissedBranch> = vec![

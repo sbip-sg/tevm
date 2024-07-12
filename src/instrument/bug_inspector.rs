@@ -313,13 +313,13 @@ where
                     self.inputs.get(1),
                     interp.stack().peek(0),
                 ) {
-                    let mut distance = if a >= b {
+                    let mut distance = if a > b {
                         a.overflowing_sub(*b).0
                     } else {
                         b.overflowing_sub(*a).0
                     };
-                    if r == U256::ZERO {
-                        distance = distance.saturating_add(U256::from(1));
+                    if r != U256::ZERO {
+                        distance = U256::from(1);
                     }
                     self.heuristics.distance = distance;
                 }
