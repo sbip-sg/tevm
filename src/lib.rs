@@ -97,7 +97,7 @@ pub struct TinyEVM {
 
 static mut TRACE_ENABLED: bool = false;
 
-/// Enable global tracing
+/// Enable printing of trace logs for debugging
 #[pyfunction]
 pub fn enable_tracing() -> Result<()> {
     use tracing_subscriber::{fmt, EnvFilter};
@@ -129,6 +129,17 @@ impl TinyEVM {
             .external
             .log_inspector
             .as_ref()
+            .unwrap()
+    }
+
+    fn log_inspector_mut(&mut self) -> &mut LogInspector {
+        self.exe
+            .as_mut()
+            .unwrap()
+            .context
+            .external
+            .log_inspector
+            .as_mut()
             .unwrap()
     }
 
@@ -633,9 +644,15 @@ impl TinyEVM {
     }
 
     /// Toggle for enable mode, only makes sense when fork_url is set
-    pub fn toggle_enable_fork(&mut self, enable: bool) {
+    pub fn toggle_enable_fork(&mut self, enabled: bool) {
         let db = &mut self.exe.as_mut().unwrap().context.evm.db;
-        db.fork_enabled = enable;
+        db.fork_enabled = enabled;
+    }
+
+    /// Set whether to log the traces of the EVM execution
+    pub fn set_evm_tracing(&mut self, enabled: bool) {
+        let log_inspector = self.log_inspector_mut();
+        log_inspector.trace_enabled = enabled;
     }
 
     /// Get the current fork toggle status

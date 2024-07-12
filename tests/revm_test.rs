@@ -1552,10 +1552,9 @@ fn test_sturdy_hack() -> Result<()> {
 
 #[test]
 fn test_events() -> Result<()> {
-    env::remove_var("TINYEVM_CALL_TRACE_ENABLED");
     let bin = include_str!("../tests/contracts/TestEvents.hex");
-    let mut evm = TinyEVM::new_offline()?;
-    let resp = evm.deploy(bin.into(), None)?;
+    let mut vm = TinyEVM::default();
+    let resp = vm.deploy(bin.into(), None)?;
     assert!(resp.success, "Deploy error {:?}", resp);
     let contract = format!("0x{:0>40}", hex::encode(&resp.data));
     println!("Contract address: {}", contract);
@@ -1564,13 +1563,13 @@ fn test_events() -> Result<()> {
         "1401d2b5", // makeEvent(3232)
         U256::from(3232)
     );
-    let resp = evm.contract_call(contract.clone(), None, Some(data.clone()), None)?;
+    let resp = vm.contract_call(contract.clone(), None, Some(data.clone()), None)?;
     assert!(resp.success, "Call error {:?}", resp);
     assert!(resp.events.is_empty(), "Expecting no events");
     assert!(resp.traces.is_empty(), "Expecting no call traces");
 
-    env::set_var("TINYEVM_CALL_TRACE_ENABLED", "1");
-    let resp = evm.contract_call(contract.clone(), None, Some(data), None)?;
+    vm.set_evm_tracing(true);
+    let resp = vm.contract_call(contract.clone(), None, Some(data), None)?;
 
     assert!(resp.success, "Call error {:?}", resp);
     assert!(resp.events.len() == 1, "Expecting one event");
