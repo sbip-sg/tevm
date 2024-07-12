@@ -885,13 +885,13 @@ fn single_run_test_helper(contract_bin_hex: &str, fn_sig: &str, tests: Vec<Integ
 
 #[test]
 fn test_deadloop() {
+    setup();
     let owner = *OWNER;
-    deploy_hex!("../tests/contracts/deadloop.hex", exe, address);
+    deploy_hex!("../tests/contracts/deadloop.hex", vm, address);
 
     let fn_sig = "run()";
     let bin = fn_sig_to_prefix(fn_sig);
     let bin = hex::decode(bin).unwrap();
-    let mut vm = TinyEVM::default();
     let resp = vm.contract_call_helper(Address::new(address.0), owner, bin, UZERO, None);
 
     assert!(!resp.success, "Expect deadloop to crash");
