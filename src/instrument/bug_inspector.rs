@@ -1,6 +1,6 @@
 use hashbrown::{HashMap, HashSet};
 use revm::{
-    interpreter::{instructions::i256, opcode, CreateInputs, CreateOutcome, Interpreter, OpCode},
+    interpreter::{opcode, CreateInputs, CreateOutcome, Interpreter, OpCode},
     primitives::{Address, U256},
     Database, EvmContext, Inspector,
 };
@@ -243,7 +243,8 @@ where
                     }
                 }
             }
-            (opcode::EXP, true) => {
+            (opcode::EXP, _) => {
+                println!("checking-exp-overflow");
                 // todo_cl check for overflow
                 if let (Some(a), Some(b), Ok(r)) = (
                     self.inputs.first(),

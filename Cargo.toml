@@ -36,6 +36,7 @@ tokio = { version = "1.38.0", features = ["full"] }
 strum_macros = "0.26.4"
 hashbrown = "*"
 redis = { version= "0.25.4", optional = true}
+alloy = { version = "0.1.4", features = ["full"] }
 
 [dev-dependencies]
 criterion = {version="0.3.6", features=["html_reports"] }

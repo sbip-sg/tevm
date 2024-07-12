@@ -14,8 +14,10 @@ use std::collections::HashMap as StdHashMap;
 use std::collections::HashSet as StdHashSet;
 
 use crate::{
-    instrument::bug::*,
-    logs::{CallTrace, Log},
+    instrument::{
+        bug::*,
+        log_inspector::{CallTrace, Log},
+    },
     ruint_u256_to_bigint, trim_prefix,
 };
 use primitive_types::H160;

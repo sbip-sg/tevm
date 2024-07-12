@@ -1,11 +1,7 @@
 use crate::CALL_DEPTH;
-use hashbrown::HashMap;
 use lazy_static::lazy_static;
 use revm::{
-    interpreter::{
-        CallInputs, CallOutcome, CallScheme, CallValue, CreateInputs, CreateOutcome,
-        InstructionResult,
-    },
+    interpreter::{CallInputs, CallOutcome, CallScheme, CallValue, InstructionResult},
     primitives::{Address, Bytes, Log as EvmLog, B256, U256},
     Database, EvmContext, Inspector,
 };

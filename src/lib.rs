@@ -1,4 +1,4 @@
-use crate::{fork_provider::ForkProvider, logs::LogInspector, response::RevmResult};
+use crate::{fork_provider::ForkProvider, response::RevmResult};
 use ::revm::{
     db::DbAccount,
     primitives::{
@@ -39,13 +39,13 @@ pub mod fork_db;
 /// Cache for the fork requests
 pub mod fork_provider;
 pub mod instrument;
-/// Logging
-mod logs;
 /// Provide response data structure from EVM
 pub mod response;
 pub use common::*;
 use hex::ToHex;
-use instrument::{bug_inspector::BugInspector, BugData, Heuristics, InstrumentConfig};
+use instrument::{
+    bug_inspector::BugInspector, log_inspector::LogInspector, BugData, Heuristics, InstrumentConfig,
+};
 use ruint::aliases::U256;
 use std::{cell::Cell, str::FromStr};
 use tracing::{debug, info, trace};
@@ -334,11 +334,8 @@ impl TinyEVM {
             transient_logs: logs,
             ignored_addresses: Default::default(),
         };
-        let mut resp: Response = revm_result.into();
-        // if let Some(force_address) = force_address {
-        //     resp.data = force_address.0.to_vec();
-        // }
-        Ok(resp)
+
+        Ok(revm_result.into())
     }
 
     /// Send a `transact_call` to a `contract` from the `sender` with raw
@@ -355,9 +352,6 @@ impl TinyEVM {
         self.clear_instrumentation();
         CALL_DEPTH.get_or_default().set(0);
 
-        debug!("db in contract_call: {:?}", self.exe.as_ref().unwrap().db());
-        debug!("sender {:?}", sender.encode_hex::<String>(),);
-
         {
             let tx = self.exe.as_mut().unwrap().tx_mut();
             tx.caller = sender;
@@ -366,17 +360,6 @@ impl TinyEVM {
             tx.value = value;
             tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
         }
-
-        // let mut traces = vec![];
-        // let mut logs = vec![];
-        // let trace_enabled = matches!(env::var("TINYEVM_CALL_TRACE_ENABLED"), Ok(val) if val == "1");
-
-        // let inspector = LogsInspector {
-        //     trace_enabled,
-        //     traces: &mut traces,
-        //     logs: &mut logs,
-        //     override_addresses: &mut Default::default(),
-        // };
 
         let result = {
             let exe = self.exe.as_mut().unwrap();

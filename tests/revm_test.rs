@@ -13,7 +13,7 @@ use std::iter::repeat_with;
 use std::ops::Add;
 use std::str::FromStr;
 use std::{collections::HashSet, env};
-use tinyevm::instrument::bug::{Bug, BugType, InstrumentConfig, MissedBranch};
+use tinyevm::instrument::bug::{Bug, BugType, MissedBranch};
 
 use tinyevm::{
     enable_tracing, fn_sig_to_prefix, ruint_u256_to_bigint, trim_prefix, TinyEVM, TX_GAS_LIMIT,
@@ -820,14 +820,21 @@ fn test_set_get_code() {
 
 #[test]
 fn test_exp_overflow() {
+    let _ = enable_tracing();
     let owner = *OWNER;
-    let mut vm = TinyEVM::default();
-    deploy_hex!("../tests/contracts/exp_overflow.hex", exe, address);
+    deploy_hex!("../tests/contracts/exp_overflow.hex", vm, address);
 
     let fn_sig = "exp(uint256)";
     let fn_sig_hex = fn_sig_to_prefix(fn_sig);
     let bin = format!("{}{:0>64x}", fn_sig_hex, 200);
     let bin = hex::decode(bin).unwrap();
+
+    println!("Calling deployed contract: {:?}", address);
+    println!(
+        "Current accounts: {:?}",
+        vm.exe.as_ref().unwrap().db().accounts
+    );
+
     let resp = vm.contract_call_helper(Address::new(address.0), owner, bin, UZERO, None);
 
     assert!(
@@ -840,14 +847,12 @@ fn test_exp_overflow() {
 
     let resp = vm.contract_call_helper(Address::new(address.0), owner, bin, UZERO, None);
 
+    let bugs = &resp.bug_data;
+
     assert!(
-        &resp
-            .bug_data
-            .clone()
-            .into_iter()
-            .any(|b| b.opcode == opcode::EXP),
+        &bugs.iter().any(|b| b.opcode == opcode::EXP),
         "Expecting exp overflow in {:?}",
-        &resp.bug_data
+        bugs
     );
 }
 

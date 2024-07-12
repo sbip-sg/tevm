@@ -3,7 +3,7 @@ use revm::primitives::Log;
 use revm::{interpreter::Interpreter, Database, EvmContext, Inspector};
 
 use crate::instrument::bug_inspector::BugInspector;
-use crate::logs::LogInspector;
+use crate::instrument::log_inspector::LogInspector;
 
 /// A chain of inspectors, ecch inspector will be executed in order.
 pub struct ChainInspector {
