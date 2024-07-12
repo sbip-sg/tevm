@@ -302,6 +302,7 @@ fn test_timestamp_and_block_number() {
 
 #[test]
 fn test_tx_origin() {
+    setup();
     let contract_hex = include_str!("../tests/contracts/tx_origin.hex");
     let fn_args = "";
     let fn_sig = "run()";
@@ -313,6 +314,7 @@ fn test_tx_origin() {
 
 #[test]
 fn test_tx_origin_v2() {
+    setup();
     let contract_hex = include_str!("../tests/contracts/test_txorigin.hex");
     let fn_args = "";
     let fn_sig = "txorigin()";
@@ -958,14 +960,15 @@ fn test_blockhash() {
 
 #[test]
 fn test_tod() {
-    deploy_hex!("../tests/contracts/test_tod.hex", exe, addr);
+    setup();
+    deploy_hex!("../tests/contracts/test_tod.hex", vm, addr);
     let owner = *OWNER;
-    exe.clear_instrumentation();
+    vm.clear_instrumentation();
 
     let bin = hex::decode(fn_sig_to_prefix("play_TOD27()")).unwrap();
-    let resp = exe.contract_call_helper(Address::new(addr.0), owner, bin, UZERO, None);
+    let resp = vm.contract_call_helper(Address::new(addr.0), owner, bin, UZERO, None);
     assert!(resp.success, "Call should succeed");
-    let bugs = exe.bug_data().clone();
+    let bugs = vm.bug_data().clone();
 
     let expected_sstore_pcs: HashSet<usize> = vec![501, 554, 561].into_iter().collect();
 
@@ -985,9 +988,9 @@ fn test_tod() {
     let bin = format!("{}{}", fn_sig_to_prefix("write_a(uint256)"), arg_hex);
     let bin = hex::decode(bin).unwrap();
 
-    let resp = exe.contract_call_helper(Address::new(addr.0), owner, bin, UZERO, None);
+    let resp = vm.contract_call_helper(Address::new(addr.0), owner, bin, UZERO, None);
     assert!(resp.success, "Call should succeed");
-    let bugs = exe.bug_data().clone();
+    let bugs = vm.bug_data().clone();
 
     println!("{:?}", bugs);
 

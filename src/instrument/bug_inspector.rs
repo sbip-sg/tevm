@@ -139,11 +139,12 @@ where
         }
 
         // it's also possible to handle REVERT, INVALID here
-
+        self.inputs.clear();
         match opcode {
             Some(
-                OpCode::JUMPI
-                // possible overflows / underflows
+                op @ (OpCode::JUMPI
+                | OpCode::SSTORE
+                | OpCode::SLOAD
                 | OpCode::ADD
                 | OpCode::SUB
                 | OpCode::MUL
@@ -151,33 +152,22 @@ where
                 | OpCode::SDIV
                 | OpCode::SMOD
                 | OpCode::EXP
-                // heuristic distance
                 | OpCode::LT
                 | OpCode::SLT
                 | OpCode::GT
                 | OpCode::SGT
                 | OpCode::EQ
-                // possible truncation
                 | OpCode::AND
+                | OpCode::ADDMOD
+                | OpCode::MULMOD),
             ) => {
-                self.inputs.clear();
-                let a = interp.stack().peek(0);
-                let b = interp.stack().peek(1);
-                if let (Ok(a), Ok(b)) = (a, b) {
-                    self.inputs.push(a);
-                    self.inputs.push(b);
-                }
-            },
-            Some( OpCode::ADDMOD | OpCode::MULMOD) => {
-                self.inputs.clear();
-                let a = interp.stack().peek(0);
-                let b = interp.stack().peek(1);
-                let n = interp.stack().peek(2);
-
-                if let (Ok(a), Ok(b), Ok(n)) = (a, b, n) {
-                    self.inputs.push(a);
-                    self.inputs.push(b);
-                    self.inputs.push(n);
+                let num_inputs = op.inputs();
+                for i in 0..num_inputs {
+                    if let Ok(v) = interp.stack().peek(i as usize) {
+                        self.inputs.push(v);
+                    } else {
+                        break;
+                    }
                 }
             }
             _ => {}
@@ -358,6 +348,32 @@ where
                         self.add_bug(bug);
                     }
                 }
+            }
+            (opcode::SSTORE, true) => {
+                if let (Some(key), Some(value)) = (self.inputs.first(), self.inputs.get(1)) {
+                    let bug = Bug::new(
+                        BugType::Sstore(*key, *value),
+                        self.opcode,
+                        self.pc,
+                        address_index,
+                    );
+                    self.add_bug(bug);
+                }
+            }
+            (opcode::SLOAD, true) => {
+                if let Some(key) = self.inputs.first() {
+                    let bug = Bug::new(BugType::Sload(*key), self.opcode, self.pc, address_index);
+                    self.add_bug(bug);
+                }
+            }
+            (opcode::ORIGIN, true) => {
+                let bug = Bug::new(
+                    BugType::TxOriginDependency,
+                    self.opcode,
+                    self.pc,
+                    address_index,
+                );
+                self.add_bug(bug);
             }
             (opcode::JUMPI, true) => {
                 // Check for missed branches
