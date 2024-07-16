@@ -11,7 +11,6 @@ Dynamic library providing API to EVM executor
 git clone git@github.com:sbip-sg/tevm.git
 ```
 
-
 * Run test in tinyevm
 
 - For unit tests, run
@@ -29,10 +28,7 @@ make bench
 
 ## How to test the underline REVM
 
-
-If you wish to verify that your EVM implementation adheres to the EVM specification, you'll need to conduct this test.
-
-To do so, you should first clone the sbip/revm repository. After cloning, switch to the instrument branch. Once you're on the correct branch, follow the instructions provided in the [documentaion](https://github.com/sbip-sg/revm#running-eth-tests) to execute the test.
+<!-- TODO add documentation on how to disable the instrumentation completely -->
 
 
 ## How to contribute

@@ -23,9 +23,10 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - uses: actions-rs/toolchain@v1             # Rust toolchain
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
       with:
-        components: rustfmt, clippy
+        components: rustfmt, clippy, llvm-tools-preview
 
     - name: Get OS infomration
       id: os
@@ -70,10 +71,6 @@ jobs:
 
     - name: Run Rust tests
       run: cargo nextest run
-
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        components: llvm-tools-preview
 
     - name: Install as local Python package
       uses: PyO3/maturin-action@v1
