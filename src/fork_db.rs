@@ -1,13 +1,10 @@
-use hashbrown::hash_map::Entry;
-use hashbrown::{HashMap, HashSet};
-use std::env;
-
-use crate::cache::filesystem_cache::FileSystemProviderCache;
-use crate::cache::ProviderCache;
+use crate::cache::{DefaultProviderCache, ProviderCache};
 use crate::fork_provider::ForkProvider;
 use crate::CALL_DEPTH;
 use ethers::types::{Block, TxHash};
 use eyre::{ContextCompat, Result};
+use hashbrown::hash_map::Entry;
+use hashbrown::{HashMap, HashSet};
 use primitive_types::H256;
 use revm::db::{AccountState, DbAccount};
 use revm::primitives::{
@@ -15,6 +12,7 @@ use revm::primitives::{
     U256,
 };
 use revm::{Database, DatabaseCommit};
+use std::env;
 use tracing::{debug, info, trace};
 
 #[derive(Debug, Default)]
@@ -42,7 +40,7 @@ pub struct ForkDB<T: ProviderCache> {
     max_fork_depth: usize,
 }
 
-impl Clone for ForkDB<FileSystemProviderCache> {
+impl Clone for ForkDB<DefaultProviderCache> {
     fn clone(&self) -> Self {
         Self {
             accounts: self.accounts.clone(),

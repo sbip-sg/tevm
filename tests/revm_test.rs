@@ -1419,7 +1419,7 @@ fn test_fork() -> Result<()> {
 
 #[test]
 fn test_call_forked_contract_from_local_contract() -> Result<()> {
-    let _ = enable_tracing();
+    setup();
     let bin = include_str!("../tests/contracts/test_fork.hex");
     let fork_url = Some("https://bscrpc.com".into());
     let block_id = Some(0x1e08bd6);

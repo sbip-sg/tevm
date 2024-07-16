@@ -7,14 +7,11 @@ use ::revm::{
     },
     Evm,
 };
-#[cfg(feature = "redis")]
-use cache::redis_cache::RedisProviderCache as DefaultProviderCache;
+use cache::DefaultProviderCache;
+
 use chain_inspector::ChainInspector;
 use hashbrown::{HashMap, HashSet};
 use revm::inspector_handle_register;
-
-#[cfg(not(feature = "redis"))]
-use cache::filesystem_cache::FileSystemProviderCache as DefaultProviderCache;
 
 use dotenv::dotenv;
 use ethers_providers::{Http, Provider};
