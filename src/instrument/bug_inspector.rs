@@ -1,5 +1,5 @@
 use hashbrown::{HashMap, HashSet};
-use primitive_types::H160;
+use primitive_types::{H160, H256};
 use revm::{
     interpreter::{CreateInputs, CreateOutcome, Interpreter, OpCode},
     primitives::{Address, U256},
@@ -165,7 +165,8 @@ where
                 | OpCode::EQ
                 | OpCode::AND
                 | OpCode::ADDMOD
-                | OpCode::MULMOD),
+                | OpCode::MULMOD
+                | OpCode::KECCAK256),
             ) => {
                 let num_inputs = op.inputs();
                 for i in 0..num_inputs {
@@ -488,6 +489,29 @@ where
             Some(op @ (OpCode::SELFDESTRUCT | OpCode::CREATE | OpCode::CREATE2)) => {
                 let bug = Bug::new(BugType::Unclassified, op.get(), pc, address_index);
                 self.add_bug(bug);
+            }
+            Some(OpCode::KECCAK256) => {
+                if self.instrument_config.record_sha3_mapping {
+                    if let (Some(offset), Some(size), Ok(output)) = (
+                        self.inputs.first(),
+                        self.inputs.get(1),
+                        interp.stack().peek(0),
+                    ) {
+                        let offset = offset.as_limbs()[0] as usize;
+                        let size = size.as_limbs()[0] as usize;
+                        let input = &interp.shared_memory.context_memory()[offset..offset + size];
+                        // get only last 32 bytes
+                        let last_32 = {
+                            if input.len() > 32 {
+                                &input[input.len() - 32..]
+                            } else {
+                                input
+                            }
+                        };
+                        let output = H256::from_slice(&output.to_be_bytes::<32>());
+                        self.heuristics.record_sha3_mapping(last_32, output);
+                    }
+                }
             }
             _ => (),
         }

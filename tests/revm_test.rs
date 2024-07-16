@@ -1215,6 +1215,7 @@ fn test_reset_storage() {
 
 #[test]
 fn test_sha3_mapping() {
+    setup();
     deploy_hex!("../tests/contracts/sha3_mapping.hex", vm, addr);
     let addr = Address::new(addr.0);
 
