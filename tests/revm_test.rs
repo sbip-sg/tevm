@@ -713,6 +713,7 @@ fn test_div_zero() {
 
 #[test]
 fn test_mod_zero() {
+    setup();
     let tests = vec![
         (U256::from(1), Some((BugType::IntegerModByZero, 149)), false),
         (U256::from(2), Some((BugType::IntegerModByZero, 178)), false),

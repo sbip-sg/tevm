@@ -1,7 +1,7 @@
 use hashbrown::{HashMap, HashSet};
 use primitive_types::H160;
 use revm::{
-    interpreter::{opcode, CreateInputs, CreateOutcome, Interpreter, OpCode},
+    interpreter::{CreateInputs, CreateOutcome, Interpreter, OpCode},
     primitives::{Address, U256},
     Database, EvmContext, Inspector,
 };
@@ -28,7 +28,7 @@ pub struct BugInspector {
     /// Stack inputs of the current opcodes. Only updated when the opcode is interesting
     inputs: Vec<U256>,
     /// Current opcode
-    opcode: u8,
+    opcode: Option<OpCode>,
     // Current program counter
     pc: usize,
     /// Current index in the execution. For tracking peephole optimized if-statement
@@ -127,8 +127,9 @@ where
     fn step(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
         let _ = interp;
         let _ = context;
-        self.opcode = interp.current_opcode();
-        let opcode = OpCode::new(self.opcode);
+        let opcode = interp.current_opcode();
+        let opcode = OpCode::new(opcode);
+        self.opcode = opcode;
         self.pc = interp.program_counter();
 
         if let Some(OpCode::EQ) = opcode {
@@ -139,7 +140,6 @@ where
             self.last_index_sub = self.step_index;
         }
 
-        // it's also possible to handle REVERT, INVALID here
         self.inputs.clear();
         match opcode {
             Some(
@@ -155,6 +155,7 @@ where
                 | OpCode::MUL
                 | OpCode::DIV
                 | OpCode::SDIV
+                | OpCode::MOD
                 | OpCode::SMOD
                 | OpCode::EXP
                 | OpCode::LT
@@ -192,54 +193,60 @@ where
             self.record_pc(address, pc);
         }
 
-        let result = &interp.instruction_result;
-        let success = result.is_ok();
-
-        // Check for overflow and underflow
-        match (opcode, success) {
-            (opcode::ADD, true) => {
+        match opcode {
+            Some(op @ OpCode::ADD) => {
                 if let Ok(r) = interp.stack().peek(0) {
                     if let (Some(a), Some(b)) = (self.inputs.first(), self.inputs.get(1)) {
                         if r < *a || r < *b {
-                            let bug = Bug::new(BugType::IntegerOverflow, opcode, pc, address_index);
+                            let bug =
+                                Bug::new(BugType::IntegerOverflow, op.get(), pc, address_index);
                             self.add_bug(bug);
                         }
                     }
                 }
             }
-            (opcode::MUL, true) => {
+            Some(op @ OpCode::MUL) => {
                 if let (Some(a), Some(b)) = (self.inputs.first(), self.inputs.get(1)) {
                     if mul_overflow(*a, *b) {
-                        let bug = Bug::new(BugType::IntegerOverflow, opcode, pc, address_index);
+                        let bug = Bug::new(BugType::IntegerOverflow, op.get(), pc, address_index);
                         self.add_bug(bug);
                     }
                 }
             }
-            (opcode::SUB, true) => {
+            Some(op @ OpCode::SUB) => {
                 if let (Some(a), Some(b)) = (self.inputs.first(), self.inputs.get(1)) {
                     if a < b {
-                        let bug = Bug::new(BugType::IntegerSubUnderflow, opcode, pc, address_index);
+                        let bug =
+                            Bug::new(BugType::IntegerSubUnderflow, op.get(), pc, address_index);
                         self.add_bug(bug);
                     }
                 }
             }
-            (opcode::DIV | opcode::SDIV | opcode::SMOD, true) => {
+            Some(op @ (OpCode::SMOD | OpCode::MOD)) => {
                 if let Some(b) = self.inputs.get(1) {
-                    if b == &U256::ZERO {
-                        let bug = Bug::new(BugType::IntegerDivByZero, opcode, pc, address_index);
+                    if *b == U256::ZERO {
+                        let bug = Bug::new(BugType::IntegerModByZero, op.get(), pc, address_index);
                         self.add_bug(bug);
                     }
                 }
             }
-            (opcode::ADDMOD | opcode::MULMOD, true) => {
+            Some(op @ (OpCode::DIV | OpCode::SDIV)) => {
+                if let Some(b) = self.inputs.get(1) {
+                    if *b == U256::ZERO {
+                        let bug = Bug::new(BugType::IntegerDivByZero, op.get(), pc, address_index);
+                        self.add_bug(bug);
+                    }
+                }
+            }
+            Some(op @ (OpCode::ADDMOD | OpCode::MULMOD)) => {
                 if let Some(n) = self.inputs.get(2) {
                     if n == &U256::ZERO {
-                        let bug = Bug::new(BugType::IntegerDivByZero, opcode, pc, address_index);
+                        let bug = Bug::new(BugType::IntegerModByZero, op.get(), pc, address_index);
                         self.add_bug(bug);
                     }
                 }
             }
-            (opcode::EXP, _) => {
+            Some(op @ OpCode::EXP) => {
                 println!("checking-exp-overflow");
                 // todo_cl check for overflow
                 if let (Some(a), Some(b), Ok(r)) = (
@@ -248,12 +255,12 @@ where
                     interp.stack().peek(0),
                 ) {
                     if exp_overflow(*a, *b, r) {
-                        let bug = Bug::new(BugType::IntegerOverflow, opcode, pc, address_index);
+                        let bug = Bug::new(BugType::IntegerOverflow, op.get(), pc, address_index);
                         self.add_bug(bug);
                     }
                 }
             }
-            (opcode::LT, true) => {
+            Some(OpCode::LT) => {
                 if let (Some(a), Some(b)) = (self.inputs.first(), self.inputs.get(1)) {
                     let distance = if a >= b {
                         a.overflowing_sub(*b).0.saturating_add(U256::from(1))
@@ -263,7 +270,7 @@ where
                     self.heuristics.distance = distance;
                 }
             }
-            (opcode::GT, true) => {
+            Some(OpCode::GT) => {
                 if let (Some(a), Some(b)) = (self.inputs.first(), self.inputs.get(1)) {
                     let distance = if a >= b {
                         a.overflowing_sub(*b).0
@@ -273,7 +280,7 @@ where
                     self.heuristics.distance = distance;
                 }
             }
-            (opcode::SLT, true) => {
+            Some(OpCode::SLT) => {
                 if let (Some(a), Some(b), Ok(r)) = (
                     self.inputs.first(),
                     self.inputs.get(1),
@@ -290,7 +297,7 @@ where
                     self.heuristics.distance = distance;
                 }
             }
-            (opcode::SGT, true) => {
+            Some(OpCode::SGT) => {
                 if let (Some(a), Some(b), Ok(r)) = (
                     self.inputs.first(),
                     self.inputs.get(1),
@@ -303,7 +310,7 @@ where
                     self.heuristics.distance = distance;
                 }
             }
-            (opcode::EQ, true) => {
+            Some(OpCode::EQ) => {
                 if let (Some(a), Some(b), Ok(r)) = (
                     self.inputs.first(),
                     self.inputs.get(1),
@@ -320,7 +327,7 @@ where
                     self.heuristics.distance = distance;
                 }
             }
-            (opcode::AND, true) => {
+            Some(op @ OpCode::AND) => {
                 if let (Some(a), Some(b)) = (self.inputs.first(), self.inputs.get(1)) {
                     // check if there is an possible truncation
 
@@ -347,7 +354,7 @@ where
                     if possible_overflow {
                         let bug = Bug::new(
                             BugType::PossibleIntegerTruncation,
-                            opcode,
+                            op.get(),
                             pc,
                             address_index,
                         );
@@ -355,39 +362,38 @@ where
                     }
                 }
             }
-            (opcode::SSTORE, true) => {
+            Some(op @ OpCode::SSTORE) => {
                 if let (Some(key), Some(value)) = (self.inputs.first(), self.inputs.get(1)) {
                     let bug = Bug::new(
                         BugType::Sstore(*key, *value),
-                        self.opcode,
+                        op.get(),
                         self.pc,
                         address_index,
                     );
                     self.add_bug(bug);
                 }
             }
-            (opcode::SLOAD, true) => {
+            Some(op @ OpCode::SLOAD) => {
                 if let Some(key) = self.inputs.first() {
-                    let bug = Bug::new(BugType::Sload(*key), self.opcode, self.pc, address_index);
+                    let bug = Bug::new(BugType::Sload(*key), op.get(), self.pc, address_index);
                     self.add_bug(bug);
                 }
             }
-            (opcode::ORIGIN, true) => {
+            Some(op @ OpCode::ORIGIN) => {
                 let bug = Bug::new(
                     BugType::TxOriginDependency,
-                    self.opcode,
+                    op.get(),
                     self.pc,
                     address_index,
                 );
                 self.add_bug(bug);
             }
 
-            (opcode::CALL, _)
-            | (opcode::CALLCODE, _)
-            | (opcode::DELEGATECALL, _)
-            | (opcode::STATICCALL, _) => {
+            Some(
+                op @ (OpCode::CALL | OpCode::CALLCODE | OpCode::DELEGATECALL | OpCode::STATICCALL),
+            ) => {
                 let in_len = {
-                    if self.opcode == opcode::CALL || self.opcode == opcode::CALLCODE {
+                    if matches!(op, OpCode::CALL | OpCode::CALLCODE) {
                         self.inputs.get(4)
                     } else {
                         self.inputs.get(3)
@@ -401,14 +407,14 @@ where
                     let in_len = usize::try_from(in_len).unwrap();
                     let bug = Bug::new(
                         BugType::Call(in_len, callee),
-                        self.opcode,
+                        op.get(),
                         self.pc,
                         address_index,
                     );
                     self.add_bug(bug);
                 }
             }
-            (opcode::JUMPI, true) => {
+            Some(op @ OpCode::JUMPI) => {
                 // Check for missed branches
                 let target_address = self.instrument_config.target_address;
                 macro_rules! update_heuritics {
@@ -426,7 +432,7 @@ where
                             );
                             let target = if $cond { $dest_pc } else { $prev_pc + 1 };
                             let bug =
-                                Bug::new(BugType::Jumpi(target), opcode, $prev_pc, address_index);
+                                Bug::new(BugType::Jumpi(target), op.get(), $prev_pc, address_index);
                             self.add_bug(bug);
                         }
                     };
@@ -455,32 +461,30 @@ where
                     update_heuritics!(pc, dest, cond);
                 }
             }
-            (opcode::BLOBHASH, _) => {
-                let bug = Bug::new(BugType::BlockValueDependency, opcode, pc, address_index);
+            Some(op @ OpCode::BLOBHASH) => {
+                let bug = Bug::new(BugType::BlockValueDependency, op.get(), pc, address_index);
                 self.add_bug(bug);
             }
-            (opcode::COINBASE, _) => {
-                let bug = Bug::new(BugType::BlockValueDependency, opcode, pc, address_index);
+            Some(op @ OpCode::COINBASE) => {
+                let bug = Bug::new(BugType::BlockValueDependency, op.get(), pc, address_index);
                 self.add_bug(bug);
             }
-            (opcode::TIMESTAMP, _) => {
-                let bug = Bug::new(BugType::TimestampDependency, opcode, pc, address_index);
+            Some(op @ OpCode::TIMESTAMP) => {
+                let bug = Bug::new(BugType::TimestampDependency, op.get(), pc, address_index);
                 self.add_bug(bug);
             }
-            (opcode::NUMBER, _) => {
-                let bug = Bug::new(BugType::BlockNumberDependency, opcode, pc, address_index);
+            Some(op @ OpCode::NUMBER) => {
+                let bug = Bug::new(BugType::BlockNumberDependency, op.get(), pc, address_index);
                 self.add_bug(bug);
             }
-            (opcode::DIFFICULTY, _) => {
-                let bug = Bug::new(BugType::BlockValueDependency, opcode, pc, address_index);
+            Some(op @ OpCode::DIFFICULTY) => {
+                let bug = Bug::new(BugType::BlockValueDependency, op.get(), pc, address_index);
                 self.add_bug(bug);
             }
-
-            (opcode::REVERT | opcode::INVALID, _) => {
-                let bug = Bug::new(BugType::RevertOrInvalid, opcode, pc, address_index);
+            Some(op @ (OpCode::REVERT | OpCode::INVALID)) => {
+                let bug = Bug::new(BugType::RevertOrInvalid, op.get(), pc, address_index);
                 self.add_bug(bug);
             }
-
             _ => (),
         }
     }
