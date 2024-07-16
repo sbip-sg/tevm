@@ -54,12 +54,6 @@ jobs:
     - name: Install Python dependencies
       run: pip install -r requirements-dev.txt
 
-    - uses: webfactory/ssh-agent@v0.5.4
-      with:
-        ssh-private-key: |
-          ${{ secrets.SSH_PRIVATE_KEY_RUST_EVM }}
-          ${{ secrets.SSH_PRIVATE_KEY_REVM }}
-
     - name: Check code formatting
       run: cargo +stable fmt
 
