@@ -141,43 +141,41 @@ where
         }
 
         self.inputs.clear();
-        match opcode {
-            Some(
-                op @ (OpCode::JUMPI
-                | OpCode::CALL
-                | OpCode::CALLCODE
-                | OpCode::DELEGATECALL
-                | OpCode::STATICCALL
-                | OpCode::SSTORE
-                | OpCode::SLOAD
-                | OpCode::ADD
-                | OpCode::SUB
-                | OpCode::MUL
-                | OpCode::DIV
-                | OpCode::SDIV
-                | OpCode::MOD
-                | OpCode::SMOD
-                | OpCode::EXP
-                | OpCode::LT
-                | OpCode::SLT
-                | OpCode::GT
-                | OpCode::SGT
-                | OpCode::EQ
-                | OpCode::AND
-                | OpCode::ADDMOD
-                | OpCode::MULMOD
-                | OpCode::KECCAK256),
-            ) => {
-                let num_inputs = op.inputs();
-                for i in 0..num_inputs {
-                    if let Ok(v) = interp.stack().peek(i as usize) {
-                        self.inputs.push(v);
-                    } else {
-                        break;
-                    }
+        if let Some(
+            op @ (OpCode::JUMPI
+            | OpCode::CALL
+            | OpCode::CALLCODE
+            | OpCode::DELEGATECALL
+            | OpCode::STATICCALL
+            | OpCode::SSTORE
+            | OpCode::SLOAD
+            | OpCode::ADD
+            | OpCode::SUB
+            | OpCode::MUL
+            | OpCode::DIV
+            | OpCode::SDIV
+            | OpCode::MOD
+            | OpCode::SMOD
+            | OpCode::EXP
+            | OpCode::LT
+            | OpCode::SLT
+            | OpCode::GT
+            | OpCode::SGT
+            | OpCode::EQ
+            | OpCode::AND
+            | OpCode::ADDMOD
+            | OpCode::MULMOD
+            | OpCode::KECCAK256),
+        ) = opcode
+        {
+            let num_inputs = op.inputs();
+            for i in 0..num_inputs {
+                if let Ok(v) = interp.stack().peek(i as usize) {
+                    self.inputs.push(v);
+                } else {
+                    break;
                 }
             }
-            _ => {}
         }
 
         self.inc_step_index();
