@@ -1115,8 +1115,11 @@ fn test_seen_pcs() {
 
 #[test]
 fn test_runtime_configuration() {
+    setup();
     deploy_hex!("../tests/contracts/contract_creation_B.hex", vm, address);
     let address = Address::new(address.0);
+
+    vm.instrument_config_mut().pcs_by_address = false;
 
     vm.set_account_balance(
         *OWNER,
