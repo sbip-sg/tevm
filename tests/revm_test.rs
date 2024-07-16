@@ -1397,6 +1397,7 @@ fn test_fork() -> Result<()> {
     setup();
     if env::var("TINYEVM_CI_TESTS").is_ok() {
         warn!("Skipping tests on CI");
+        return Ok(());
     }
 
     let fork_url = Some("https://eth.llamarpc.com".into());
@@ -1429,6 +1430,7 @@ fn test_call_forked_contract_from_local_contract() -> Result<()> {
     setup();
     if env::var("TINYEVM_CI_TESTS").is_ok() {
         warn!("Skipping tests on CI");
+        return Ok(());
     }
 
     let bin = include_str!("../tests/contracts/test_fork.hex");
@@ -1505,6 +1507,7 @@ fn test_sturdy_hack() -> Result<()> {
     setup();
     if env::var("TINYEVM_CI_TESTS").is_ok() {
         warn!("Skipping tests on CI");
+        return Ok(());
     }
 
     let bin = include_str!("../tests/contracts/SturdyFinance_ReadonlyRE.hex");

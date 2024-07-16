@@ -4253,42 +4253,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tevm"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "criterion",
- "dotenv",
- "ethers",
- "ethers-contract",
- "ethers-core",
- "ethers-middleware",
- "ethers-providers",
- "eyre",
- "hashbrown",
- "hex",
- "lazy_static",
- "libc",
- "maplit",
- "num-bigint",
- "primitive-types",
- "pyo3",
- "redis",
- "revm",
- "ruint",
- "serde",
- "serde_json",
- "sha3",
- "simple_logger",
- "strum_macros",
- "thread_local",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid 1.10.0",
-]
-
-[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4376,6 +4340,42 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c9d3793400a45f954c52e73d068316d76b6f4e36977e3fcebb13a2721e80237"
 dependencies = [
  "crunchy",
+]
+
+[[package]]
+name = "tinyevm"
+version = "1.0.0"
+dependencies = [
+ "alloy",
+ "criterion",
+ "dotenv",
+ "ethers",
+ "ethers-contract",
+ "ethers-core",
+ "ethers-middleware",
+ "ethers-providers",
+ "eyre",
+ "hashbrown",
+ "hex",
+ "lazy_static",
+ "libc",
+ "maplit",
+ "num-bigint",
+ "primitive-types",
+ "pyo3",
+ "redis",
+ "revm",
+ "ruint",
+ "serde",
+ "serde_json",
+ "sha3",
+ "simple_logger",
+ "strum_macros",
+ "thread_local",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid 1.10.0",
 ]
 
 [[package]]
