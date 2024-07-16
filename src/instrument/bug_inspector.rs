@@ -485,6 +485,10 @@ where
                 let bug = Bug::new(BugType::RevertOrInvalid, op.get(), pc, address_index);
                 self.add_bug(bug);
             }
+            Some(op @ (OpCode::SELFDESTRUCT | OpCode::CREATE | OpCode::CREATE2)) => {
+                let bug = Bug::new(BugType::Unclassified, op.get(), pc, address_index);
+                self.add_bug(bug);
+            }
             _ => (),
         }
     }

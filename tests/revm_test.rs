@@ -1074,6 +1074,7 @@ fn test_get_set_balance() {
 
 #[test]
 fn test_selfdestruct_and_create() {
+    setup();
     deploy_hex!("../tests/contracts/self_destruct.hex", vm, addr);
 
     let bin = hex::decode(fn_sig_to_prefix("kill()")).unwrap();
