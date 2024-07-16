@@ -1350,6 +1350,7 @@ fn test_distance_signed() {
 
 #[test]
 fn test_peephole_optimized_if_equal() {
+    setup();
     deploy_hex!(
         "../tests/contracts/test_peephole_optimized.hex",
         vm,
@@ -1362,7 +1363,8 @@ fn test_peephole_optimized_if_equal() {
     let input = U256::from(1);
     let fn_args_hex = format!("{:0>64x}", input);
 
-    let expected_missed_branches: (usize, usize, U256) = (317, 167, U256::from(0x2007));
+    let expected_missed_branches: (usize, usize, U256) = (166, 181, U256::from(0x2007));
+    // [MissedBranch { prev_pc: 11, cond: true, dest_pc: 16, distance: 115792089237316195423570985008687907853269984665640564039457584007913129639935, address_index: 0 }, MissedBranch { prev_pc: 25, cond: false, dest_pc: 65, distance: 33, address_index: 0 }, MissedBranch { prev_pc: 42, cond: true, dest_pc: 70, distance: 1, address_index: 0 }, MissedBranch { prev_pc: 354, cond: true, dest_pc: 363, distance: 1, address_index: 0 }, MissedBranch { prev_pc: 312, cond: true, dest_pc: 317, distance: 1, address_index: 0 }, MissedBranch { prev_pc: 166, cond: true, dest_pc: 181, distance: 8199, address_index: 0 }]
 
     let fn_hex = format!("{}{}", fn_sig_hex, fn_args_hex);
 

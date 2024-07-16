@@ -440,25 +440,29 @@ where
                 }
 
                 // NOTE: invalid jumps are ignored
-                if let (Some(dest), Some(value)) = (self.inputs.first(), self.inputs.get(1)) {
+                if let (Some(counter), Some(cond)) = (self.inputs.first(), self.inputs.get(1)) {
                     // Check for distance in peephole optimized if-statement
                     if self.possibly_if_equal() {
+                        debug!(
+                            "Possible peephole optimized if-statement found, inputs: {:?} pc {}",
+                            self.inputs, self.pc
+                        );
                         let max = U256::MAX;
                         let mut half = U256::MAX;
                         half.set_bit(31, false);
                         let h = &mut self.heuristics;
                         h.distance = {
                             // smallest distance from the `value` to U256::MAX and 0
-                            if *value > half {
-                                max - value + U256::from(1)
+                            if *cond > half {
+                                max - cond + U256::from(1)
                             } else {
-                                *value
+                                *cond
                             }
                         };
                     }
 
-                    let dest = usize::try_from(dest).unwrap();
-                    let cond = *value != U256::ZERO;
+                    let dest = usize::try_from(counter).unwrap();
+                    let cond = *cond != U256::ZERO;
                     update_heuritics!(pc, dest, cond);
                 }
             }
