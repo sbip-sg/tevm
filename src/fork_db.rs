@@ -22,7 +22,7 @@ pub struct ForkDB<T: ProviderCache> {
     pub accounts: HashMap<Address, DbAccount>,
     /// Tracks all contracts by their code hash.
     pub contracts: HashMap<B256, Bytecode>,
-    /// All cached block hashes from the [DatabaseRef].
+    /// All cached block hashes
     pub block_hashes: HashMap<U256, B256>,
 
     pub fork_enabled: bool,
