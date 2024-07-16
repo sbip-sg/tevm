@@ -1298,7 +1298,7 @@ fn test_seen_addresses() {
 
 #[test]
 fn test_distance_signed() {
-    let _ = enable_tracing();
+    setup();
     deploy_hex!("../tests/contracts/test_distance_signed.hex", vm, address);
     let address = Address::new(address.0);
     let fn_sig = "sign_distance(int256)";

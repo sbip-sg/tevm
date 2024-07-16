@@ -50,14 +50,13 @@ class TestTinyEVM(unittest.TestCase):
 
         assert tevm.tx_gas_limit == 100, 'default_tx_gas_limit should be changed to 100'
         contract_bytecode = open('tests/contracts/C.hex').read()
-        salt = None
         owner = '0x388C818CA8B9251b393131C08a736A67ccB19297'
         data = None
         value = None
         init_value = 0x223312323
 
         try:
-            tevm.deterministic_deploy(contract_bytecode, salt, owner, data, value, init_value)
+            tevm.deterministic_deploy(contract_bytecode, owner, data, value, init_value)
         except RuntimeError as e:
             tprint('Expected error: {}'.format(e))
             assert 'OutOfGas' in str(e), 'should raise out of gas error'
@@ -91,7 +90,7 @@ class TestTinyEVM(unittest.TestCase):
         tprint('balance before deployment: {}'.format(balance))
 
         # todo update response object
-        resp = tevm.deterministic_deploy(contract_bytecode, salt, owner, data, value, init_value)
+        resp = tevm.deterministic_deploy(contract_bytecode, owner, data, value, init_value)
         tprint('Deployment resp: {}'.format(resp))
 
         bugs = list(resp.bug_data)

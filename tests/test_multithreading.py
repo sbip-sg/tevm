@@ -44,7 +44,7 @@ def run_test():
     tprint('balance before deployment: {}'.format(balance))
 
     # todo update response object
-    resp = tevm.deterministic_deploy(contract_bytecode, salt, owner, data, value, init_value)
+    resp = tevm.deterministic_deploy(contract_bytecode, owner, data, value, init_value)
     tprint('Deployment resp: {}'.format(resp))
 
     assert resp.success
@@ -86,7 +86,7 @@ def run_infinite_loop():
     tprint('balance before deployment: {}'.format(balance))
 
     # todo update response object
-    resp = tevm.deterministic_deploy(contract_bytecode, salt, owner, data, value, init_value)
+    resp = tevm.deterministic_deploy(contract_bytecode, owner, data, value, init_value)
     tprint('Deployment resp: {}'.format(resp))
 
     assert resp.success

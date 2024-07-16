@@ -86,6 +86,9 @@ pub struct TinyEVM {
     /// REVM instance
     pub exe: Option<Evm<'static, ChainInspector, TinyEvmDb>>,
     pub owner: Address,
+    /// Default gas limit for each transaction
+    #[pyo3(get, set)]
+    tx_gas_limit: u64,
     /// Snapshots of account state
     pub snapshots: HashMap<Address, DbAccount>,
     /// Optional fork url
@@ -271,7 +274,7 @@ impl TinyEVM {
             tx.transact_to = TransactTo::Create;
             tx.data = contract_bytecode.clone().into();
             tx.value = value;
-            tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
+            tx.gas_limit = tx_gas_limit.unwrap_or(self.tx_gas_limit);
         }
 
         // todo_cl this is read from global state, might be wrong
@@ -612,6 +615,7 @@ impl TinyEVM {
             exe: Some(exe),
             owner,
             fork_url,
+            tx_gas_limit: TX_GAS_LIMIT,
             snapshots: HashMap::with_capacity(32),
             global_snapshot: Default::default(),
         };
@@ -700,27 +704,26 @@ impl TinyEVM {
     ///
     /// For optional arguments, you can use the empty string as inputs to use the default values.
     ///
-    /// [Source: <https://docs.openzeppelin.com/cli/2.8/deploying-with-create2#create2>]
-    ///
     /// - `contract_deploy_code`: contract deploy binary array encoded as hex string
-    /// - `deploy_to_address`: Deploy the contract to the address
     /// - `owner`: Owner address as a 20-byte array encoded as hex string
     /// - `data`: (Optional, default empty) Constructor arguments encoded as hex string.
     /// - `value`: (Optional, default 0) a U256. Set the value to be included in the contract creation transaction.
+    /// - `deploy_to_address`: when provided, change the address of the deployed contract to this address
+
     ///   - This requires the constructor to be payable.
     ///   - The transaction sender (owner) must have enough balance
     /// - `init_value`: (Optional) BigInt. Override the initial balance of the contract to this value.
     ///
     /// Returns a list consisting of 4 items `[reason, address-as-byte-array, bug_data, heuristics]`
-    #[pyo3(signature = (contract_deploy_code, deploy_to_address, owner=None, data=None, value=None, init_value=None))]
+    #[pyo3(signature = (contract_deploy_code, owner=None, data=None, value=None, init_value=None, deploy_to_address=None))]
     pub fn deterministic_deploy(
         &mut self,
         contract_deploy_code: String, // variable length
-        deploy_to_address: String,
-        owner: Option<String>, // h160 as hex string
-        data: Option<String>,  // variable length
+        owner: Option<String>,        // h160 as hex string
+        data: Option<String>,         // variable length
         value: Option<BigInt>,
         init_value: Option<BigInt>,
+        deploy_to_address: Option<String>,
     ) -> Result<Response> {
         let owner = {
             if let Some(owner) = owner {
@@ -742,6 +745,9 @@ impl TinyEVM {
         let value = value.unwrap_or_default();
         let mut contract_bytecode = contract_deploy_code.to_vec();
         contract_bytecode.extend(data);
+        let force_address: Option<Address> = deploy_to_address
+            .map(|s| Address::from_str(&s))
+            .transpose()?;
 
         let resp = {
             let resp = self.deploy_helper(
@@ -749,7 +755,7 @@ impl TinyEVM {
                 contract_bytecode,
                 bigint_to_ruint_u256(&value)?,
                 None,
-                Some(Address::from_str(&deploy_to_address)?),
+                force_address,
             )?;
 
             if let Some(balance) = init_value {

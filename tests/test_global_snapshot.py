@@ -73,7 +73,7 @@ def deploy_contract(salt=None, owner='0x388C818CA8B9251b393131C08a736A67ccB19297
     data = ''
     value = None
     init_value = None
-    resp = tevm.deterministic_deploy(binary, salt, owner, data, value, init_value)
+    resp = tevm.deterministic_deploy(binary, owner, data, value, init_value)
     tprint('Deployment resp: {}'.format(resp))
 
     assert resp.success

@@ -246,7 +246,6 @@ where
                 }
             }
             Some(op @ OpCode::EXP) => {
-                println!("checking-exp-overflow");
                 // todo_cl check for overflow
                 if let (Some(a), Some(b), Ok(r)) = (
                     self.inputs.first(),
@@ -441,10 +440,6 @@ where
                 if let (Some(counter), Some(cond)) = (self.inputs.first(), self.inputs.get(1)) {
                     // Check for distance in peephole optimized if-statement
                     if self.possibly_if_equal() {
-                        debug!(
-                            "Possible peephole optimized if-statement found, inputs: {:?} pc {}",
-                            self.inputs, self.pc
-                        );
                         let max = U256::MAX;
                         let mut half = U256::MAX;
                         half.set_bit(31, false);

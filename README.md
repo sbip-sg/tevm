@@ -62,7 +62,11 @@ After PR is appproved, please merge your changes to `develop`:
 
 ## Sample usage
 
-You can find example usage in Python at `example/example.py` and `example/example-bug-detected.py`
+``` python
+# todo add a python example
+```
+
+You can find example usage in Python in the `example/` folder.
 
 Example files:
 
@@ -212,3 +216,10 @@ Legend:
   OPS: Operations Per Second, computed as 1 / Mean
 ============================================================================================================== 7 passed in 8.21s ===============================================================================================================
 ```
+
+## Changes
+
+### 1.0.0
+
+Breaking changes:
+- `deterministic_deploy` signature is now changed to `deterministic_deploy(contract_deploy_code, owner=None, data=None, value=None, init_value=None, deploy_to_address=None)`, i.e., `salt` is removed. [Related to [REVM-1182](https://github.com/bluealloy/revm/issues/1182)]. If you want to similate the previous behaviour, it's suggested to use the `deploy_to_address` parameter to specify the address where the contract will be deployed.
