@@ -381,7 +381,7 @@ impl TinyEVM {
             tx.transact_to = TransactTo::Call(contract);
             tx.data = data.into();
             tx.value = value;
-            tx.gas_limit = tx_gas_limit.unwrap_or(TX_GAS_LIMIT);
+            tx.gas_limit = tx_gas_limit.unwrap_or(self.tx_gas_limit);
         }
 
         let result = {
@@ -615,7 +615,7 @@ impl TinyEVM {
             exe: Some(exe),
             owner,
             fork_url,
-            tx_gas_limit: TX_GAS_LIMIT,
+            tx_gas_limit: u64::MAX,
             snapshots: HashMap::with_capacity(32),
             global_snapshot: Default::default(),
         };

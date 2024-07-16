@@ -35,9 +35,9 @@ class TestTinyEVM(unittest.TestCase):
         tevm = tinyevm.TinyEVM()
 
         # block_number
-        assert tevm.get_env_value_by_field('block_number') == '0x0000000000000000000000000000000000000000000000000000000000000000'
+        assert int(tevm.get_env_value_by_field('block_number'), 16) == int('0x0000000000000000000000000000000000000000000000000000000000000000', 16)
         tevm.set_env_field_value('block_number', '0x00000000000000000000000000000000000000000000000000000000000000ff')
-        assert tevm.get_env_value_by_field('block_number') == '0x00000000000000000000000000000000000000000000000000000000000000ff'
+        assert int(tevm.get_env_value_by_field('block_number'), 16) == int('0x00000000000000000000000000000000000000000000000000000000000000ff', 16)
 
         # origin
         assert tevm.get_env_value_by_field('origin') == '0x0000000000000000000000000000000000000000'
@@ -46,9 +46,9 @@ class TestTinyEVM(unittest.TestCase):
 
     def test_get_change_tx_gas_limit(self):
         tevm = tinyevm.TinyEVM()
-        tevm.tx_gas_limit = 100
+        tevm.tx_gas_limit = 0xffffffffffff
 
-        assert tevm.tx_gas_limit == 100, 'default_tx_gas_limit should be changed to 100'
+        assert tevm.tx_gas_limit == 0xffffffffffff, 'default_tx_gas_limit should be changed to 100'
         contract_bytecode = open('tests/contracts/C.hex').read()
         owner = '0x388C818CA8B9251b393131C08a736A67ccB19297'
         data = None
