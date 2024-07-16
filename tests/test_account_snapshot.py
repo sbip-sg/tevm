@@ -6,7 +6,6 @@ from datetime import datetime
 import json
 from eth_abi import encode
 
-
 def handle_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
@@ -140,7 +139,7 @@ def reset_contract_call(contract, owner):
 
 
 
-def test_snapshot(benchmark):
+def test_account_snapshot(benchmark):
     owner = '0x9C33eaCc2F50E39940D3AfaF2c7B8246B681A374'
     contract = deploy_contract(salt='0x1fff0000000000000000000000000000000000000000000000000000000000ff', owner=owner)
     def reset_contract():

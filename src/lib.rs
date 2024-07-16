@@ -8,21 +8,21 @@ use ::revm::{
     Evm,
 };
 use cache::DefaultProviderCache;
-
 use chain_inspector::ChainInspector;
-use hashbrown::{HashMap, HashSet};
-use revm::inspector_handle_register;
-
 use dotenv::dotenv;
 use ethers_providers::{Http, Provider};
 use eyre::{eyre, ContextCompat, Result};
 use fork_db::ForkDB;
+use hashbrown::{HashMap, HashSet};
 use lazy_static::lazy_static;
 use num_bigint::BigInt;
 use pyo3::prelude::*;
 use response::{Response, SeenPcsMap, WrappedBug, WrappedHeuristics, WrappedMissedBranch};
+use revm::inspector_handle_register;
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
+use uuid::Uuid;
+
 /// Caching for Web3 provider
 mod cache;
 mod chain_inspector;
@@ -44,7 +44,7 @@ use instrument::{
     bug_inspector::BugInspector, log_inspector::LogInspector, BugData, Heuristics, InstrumentConfig,
 };
 use ruint::aliases::U256;
-use std::{cell::Cell, str::FromStr};
+use std::{cell::Cell, mem::replace, str::FromStr};
 use tracing::{debug, info, trace};
 
 lazy_static! {
@@ -90,6 +90,8 @@ pub struct TinyEVM {
     pub snapshots: HashMap<Address, DbAccount>,
     /// Optional fork url
     pub fork_url: Option<String>,
+    /// Snapshot of global states
+    global_snapshot: HashMap<Uuid, ForkDB<DefaultProviderCache>>,
 }
 
 static mut TRACE_ENABLED: bool = false;
@@ -118,6 +120,14 @@ pub fn enable_tracing() -> Result<()> {
 
 // Implementations for use in Rust
 impl TinyEVM {
+    fn db(&self) -> &ForkDB<DefaultProviderCache> {
+        &self.exe.as_ref().unwrap().context.evm.db
+    }
+
+    fn db_mut(&mut self) -> &mut ForkDB<DefaultProviderCache> {
+        &mut self.exe.as_mut().unwrap().context.evm.db
+    }
+
     pub fn instrument_config_mut(&mut self) -> &mut InstrumentConfig {
         &mut self.bug_inspector_mut().instrument_config
     }
@@ -603,6 +613,7 @@ impl TinyEVM {
             owner,
             fork_url,
             snapshots: HashMap::with_capacity(32),
+            global_snapshot: Default::default(),
         };
 
         Ok(tinyevm)
@@ -1096,6 +1107,36 @@ impl TinyEVM {
         let account = self.snapshots.get(&addr).context("No snapshot found")?;
 
         db.accounts.insert(addr, account.clone());
+        Ok(())
+    }
+
+    /// Take global snapshot of all accounts
+    pub fn take_global_snapshot(&mut self) -> Result<String> {
+        let db = self.db();
+        let snapshot = db.clone();
+        let id = Uuid::new_v4();
+        self.global_snapshot.insert(id, snapshot);
+        Ok(id.to_string())
+    }
+
+    pub fn restore_global_snapshot(
+        &mut self,
+        snapshot_id: String,
+        keep_snapshot: bool,
+    ) -> Result<()> {
+        let id = Uuid::parse_str(&snapshot_id)?;
+
+        if keep_snapshot {
+            let snapshot = self.global_snapshot.get(&id).context("No snapshot found")?;
+            *self.db_mut() = snapshot.clone();
+        } else {
+            let snapshot = self
+                .global_snapshot
+                .remove(&id)
+                .context("No snapshot found")?;
+            let _ = replace(self.db_mut(), snapshot);
+        }
+
         Ok(())
     }
 }

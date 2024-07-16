@@ -10,10 +10,12 @@ use revm::primitives::Address;
 use ruint::aliases::U256;
 use std::collections::HashSet;
 use std::convert::TryInto;
+use std::env;
 use std::iter::repeat_with;
 use std::ops::Add;
 use std::str::FromStr;
 use tinyevm::instrument::bug::{Bug, BugType, MissedBranch};
+use tracing::warn;
 
 use tinyevm::{
     enable_tracing, fn_sig_to_prefix, ruint_u256_to_bigint, trim_prefix, TinyEVM, TX_GAS_LIMIT,
@@ -706,7 +708,7 @@ fn test_mod_zero() {
 
 #[test]
 fn test_gas_usage() {
-    // let _ = enable_tracing();
+    setup();
     let owner = *OWNER;
     // deploy_hex!("../tests/contracts/gasusage.hex", exe, address);
 
@@ -784,7 +786,7 @@ fn test_set_get_storage() {
 
 #[test]
 fn test_set_get_code() {
-    // let _ = enable_tracing();
+    setup();
     let owner = Address::new(H160::random().0);
     let mut vm = TinyEVM::default();
 
@@ -809,7 +811,7 @@ fn test_set_get_code() {
 
 #[test]
 fn test_exp_overflow() {
-    let _ = enable_tracing();
+    setup();
     let owner = *OWNER;
     deploy_hex!("../tests/contracts/exp_overflow.hex", vm, address);
 
@@ -1392,6 +1394,11 @@ fn test_peephole_optimized_if_equal() {
 
 #[test]
 fn test_fork() -> Result<()> {
+    setup();
+    if env::var("TINYEVM_CI_TESTS").is_ok() {
+        warn!("Skipping tests on CI");
+    }
+
     let fork_url = Some("https://eth.llamarpc.com".into());
     let block_id = Some(17869485);
 
@@ -1420,12 +1427,15 @@ fn test_fork() -> Result<()> {
 #[test]
 fn test_call_forked_contract_from_local_contract() -> Result<()> {
     setup();
+    if env::var("TINYEVM_CI_TESTS").is_ok() {
+        warn!("Skipping tests on CI");
+    }
+
     let bin = include_str!("../tests/contracts/test_fork.hex");
     let fork_url = Some("https://bscrpc.com".into());
     let block_id = Some(0x1e08bd6);
 
     let mut evm = TinyEVM::new(fork_url, block_id)?;
-    enable_tracing()?;
 
     let resp = evm.deploy(bin.into(), None)?;
 
@@ -1492,12 +1502,16 @@ fn test_call_forked_contract_from_local_contract() -> Result<()> {
 
 #[test]
 fn test_sturdy_hack() -> Result<()> {
+    setup();
+    if env::var("TINYEVM_CI_TESTS").is_ok() {
+        warn!("Skipping tests on CI");
+    }
+
     let bin = include_str!("../tests/contracts/SturdyFinance_ReadonlyRE.hex");
     let fork_url = Some("https://eth.llamarpc.com".into());
     let block_id = Some(17_460_609);
 
     let mut evm = TinyEVM::new(fork_url, block_id)?;
-    enable_tracing()?;
 
     let resp = evm.deploy(bin.into(), None)?;
 

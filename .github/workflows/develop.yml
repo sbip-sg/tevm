@@ -12,6 +12,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+  TINYEVM_CI_TESTS: true
 
 jobs:
   Test:

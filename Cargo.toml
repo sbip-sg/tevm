@@ -37,6 +37,7 @@ strum_macros = "0.26.4"
 hashbrown = "*"
 redis = { version= "0.25.4", optional = true}
 alloy = { version = "0.1.4", features = ["full"] }
+uuid = { version = "1.9.1", features = ["v4"] }
 
 [dev-dependencies]
 criterion = {version="0.3.6", features=["html_reports"] }
