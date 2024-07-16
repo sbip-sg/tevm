@@ -489,6 +489,13 @@ where
             Some(op @ (OpCode::SELFDESTRUCT | OpCode::CREATE | OpCode::CREATE2)) => {
                 let bug = Bug::new(BugType::Unclassified, op.get(), pc, address_index);
                 self.add_bug(bug);
+                if matches!(op, OpCode::CREATE | OpCode::CREATE2) {
+                    if let Ok(created_address) = interp.stack.peek(0) {
+                        let bytes: [u8; 32] = created_address.to_be_bytes();
+                        let created_address = Address::from_slice(&bytes[12..]);
+                        self.record_seen_address(created_address);
+                    }
+                }
             }
             Some(OpCode::KECCAK256) => {
                 if self.instrument_config.record_sha3_mapping {
@@ -540,6 +547,7 @@ where
                         address
                     );
                 }
+
                 return CreateOutcome::new(result.to_owned(), Some(*override_address));
             }
         }

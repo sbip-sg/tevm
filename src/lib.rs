@@ -121,6 +121,9 @@ pub fn enable_tracing() -> Result<()> {
 
 // Implementations for use in Rust
 impl TinyEVM {
+    pub fn instrument_config_mut(&mut self) -> &mut InstrumentConfig {
+        &mut self.bug_inspector_mut().instrument_config
+    }
     fn log_inspector(&self) -> &LogInspector {
         self.exe
             .as_ref()
@@ -238,7 +241,6 @@ impl TinyEVM {
         owner: Address,
         contract_bytecode: Vec<u8>,
         value: U256,
-        _overwrite: bool, // not supported yet
         tx_gas_limit: Option<u64>,
         force_address: Option<Address>, // not supported yet
     ) -> Result<Response> {
@@ -679,7 +681,6 @@ impl TinyEVM {
             owner,
             hex::decode(contract_deploy_code)?,
             U256::default(),
-            true,
             None,
             None,
         )
@@ -739,7 +740,6 @@ impl TinyEVM {
                 owner,
                 contract_bytecode,
                 bigint_to_ruint_u256(&value)?,
-                true,
                 None,
                 Some(Address::from_str(&deploy_to_address)?),
             )?;
@@ -924,18 +924,13 @@ impl TinyEVM {
     /// - `config`: A json string serialized for [`InstrumentConfig`](https://github.com/sbip-sg/revm/blob/6f7ac687a22f67462999ca132ede8d116bd7feb9/crates/revm/src/bug.rs#L153)
     pub fn configure(&mut self, config: &REVMConfig) -> Result<()> {
         let config = config.to_iconfig()?;
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
-        db.instrument_config = Some(config);
+        self.bug_inspector_mut().instrument_config = config;
         Ok(())
     }
 
     /// Get current runtime instrumentation configuration
     pub fn get_instrument_config(&self) -> Result<REVMConfig> {
-        let db = &self.exe.as_ref().unwrap().context.evm.db;
-        let r = &db
-            .instrument_config
-            .as_ref()
-            .ok_or_else(|| eyre!("Instrumentation config not set"))?;
+        let r = &self.bug_inspector().instrument_config;
         Ok(REVMConfig::from(r))
     }
 

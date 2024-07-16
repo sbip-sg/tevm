@@ -5,7 +5,6 @@ use std::env;
 use crate::cache::filesystem_cache::FileSystemProviderCache;
 use crate::cache::ProviderCache;
 use crate::fork_provider::ForkProvider;
-use crate::instrument::bug::{BugData, Heuristics, InstrumentConfig};
 use crate::CALL_DEPTH;
 use ethers::types::{Block, TxHash};
 use eyre::{ContextCompat, Result};
@@ -17,22 +16,6 @@ use revm::primitives::{
 };
 use revm::{Database, DatabaseCommit};
 use tracing::{debug, info, trace};
-
-#[derive(Debug, Clone, Default)]
-pub struct InstrumentData {
-    pub bug_data: BugData,
-    pub heuristics: Heuristics,
-    // Mapping from contract address to a set of PCs seen in the execution
-    pub pcs_by_address: HashMap<Address, HashSet<usize>>,
-    // Holding the addresses created in the current transaction,
-    // must be cleared by transaction caller before or after each transaction
-    pub created_addresses: Vec<Address>,
-    // Managed addresses: contract -> addresses created by any transaction from the contract
-    pub managed_addresses: HashMap<Address, Vec<Address>>,
-    pub opcode_index: usize,
-    pub last_index_sub: usize,
-    pub last_index_eq: usize,
-}
 
 #[derive(Debug, Default)]
 pub struct ForkDB<T: ProviderCache> {
@@ -57,9 +40,6 @@ pub struct ForkDB<T: ProviderCache> {
     block_cache: HashMap<u64, Block<TxHash>>,
     /// Max depth to consider when forking address
     max_fork_depth: usize,
-
-    /// Optional instrument config
-    pub instrument_config: Option<InstrumentConfig>,
 }
 
 impl Clone for ForkDB<FileSystemProviderCache> {
@@ -75,7 +55,6 @@ impl Clone for ForkDB<FileSystemProviderCache> {
             block_cache: self.block_cache.clone(),
             ignored_addresses: self.ignored_addresses.clone(),
             max_fork_depth: self.max_fork_depth,
-            instrument_config: self.instrument_config.clone(),
         }
     }
 }
@@ -153,7 +132,6 @@ impl<T: ProviderCache> ForkDB<T> {
             block_cache: HashMap::new(),
             ignored_addresses: Default::default(),
             max_fork_depth,
-            instrument_config: Some(InstrumentConfig::default()),
         }
     }
 

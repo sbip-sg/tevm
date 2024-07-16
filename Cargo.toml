@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 name="tinyevm"
-crate_type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "rlib"]
 path="src/lib.rs"
 
 [dependencies]
