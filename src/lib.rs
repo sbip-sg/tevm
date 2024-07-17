@@ -42,7 +42,7 @@ pub mod instrument;
 /// Provide response data structure from EVM
 pub mod response;
 pub use common::*;
-use hex::{FromHex, ToHex};
+use hex::ToHex;
 use instrument::{
     bug_inspector::BugInspector, log_inspector::LogInspector, BugData, Heuristics, InstrumentConfig,
 };
@@ -748,9 +748,8 @@ impl TinyEVM {
         contract_bytecode.extend(data);
 
         let salt = {
-            if let Some(salt) = salt {
-                let salt = &salt;
-                B256::from_hex(salt)?
+            if let Some(ref salt) = salt {
+                B256::from(U256::from_str_radix(trim_prefix(salt, "0x"), 16)?)
             } else {
                 B256::ZERO
             }
@@ -772,6 +771,10 @@ impl TinyEVM {
                 None,
                 Some(force_address),
             )?;
+
+            if !resp.success {
+                // todo return reverted
+            }
 
             if let Some(balance) = init_value {
                 let address = Address::from_slice(&resp.data);
