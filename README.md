@@ -223,3 +223,4 @@ Legend:
 
 Breaking changes:
 - `deterministic_deploy` signature is now changed to `deterministic_deploy(contract_deploy_code, owner=None, data=None, value=None, init_value=None, deploy_to_address=None)`, i.e., `salt` is removed. [Related to [REVM-1182](https://github.com/bluealloy/revm/issues/1182)]. If you want to similate the previous behaviour, it's suggested to use the `deploy_to_address` parameter to specify the address where the contract will be deployed.
+- `enabled` in `REVMConfig` is removed. To disable all instrumentation, use

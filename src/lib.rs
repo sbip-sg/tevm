@@ -277,7 +277,7 @@ impl TinyEVM {
             tx.gas_limit = tx_gas_limit.unwrap_or(self.tx_gas_limit);
         }
 
-        // todo_cl this is read from global state, might be wrong
+        // todo this is read from global state, might be wrong
         let nonce = self
             .exe
             .as_ref()
@@ -546,7 +546,6 @@ impl TinyEVM {
 
         let fork_enabled = fork_url.is_some();
 
-        // let mut db = InMemoryDB::default();
         let mut db = match fork_url {
             Some(ref url) => {
                 info!("Starting EVM from fork {} and block: {:?}", url, block_id);
@@ -603,8 +602,6 @@ impl TinyEVM {
             bug_inspector: Some(bug_inspector),
         };
 
-        // builder = builder.with_external_context(inspector);
-
         let exe = Evm::builder()
             .modify_env(|e| *e = Box::new(env.clone()))
             .with_db(db.clone())
@@ -615,7 +612,7 @@ impl TinyEVM {
             exe: Some(exe),
             owner,
             fork_url,
-            tx_gas_limit: u64::MAX,
+            tx_gas_limit: TX_GAS_LIMIT,
             snapshots: HashMap::with_capacity(32),
             global_snapshot: Default::default(),
         };
