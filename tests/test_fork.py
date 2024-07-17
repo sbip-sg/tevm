@@ -14,7 +14,8 @@ def tprint(*args):
 class TestTinyEVM(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        tinyevm.enable_tracing()
+        # tinyevm.enable_tracing()
+        pass
 
     def test_get_balance_from_fork(self):
         fork_url = "https://eth.llamarpc.com"

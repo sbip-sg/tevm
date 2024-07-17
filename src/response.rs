@@ -14,8 +14,10 @@ use std::collections::HashMap as StdHashMap;
 use std::collections::HashSet as StdHashSet;
 
 use crate::{
-    instrument::bug::*,
-    logs::{CallTrace, Log},
+    instrument::{
+        bug::*,
+        log_inspector::{CallTrace, Log},
+    },
     ruint_u256_to_bigint, trim_prefix,
 };
 use primitive_types::H160;
@@ -57,12 +59,13 @@ pub struct WrappedBug {
 #[derive(Clone, Debug)]
 pub struct WrappedMissedBranch {
     /// Previous program counter
-    // pub prev_pc: usize,
     pub prev_pc: usize,
-    /// Missed program counter
-    pub pc: usize,
+    /// Destination pc if condition is true
+    pub dest_pc: usize,
+    pub cond: bool,
     /// Distiance required to reach the missed branch
     pub distance: BigInt,
+    pub address_index: isize,
 }
 
 /// Wrapper around Heuristics
@@ -103,8 +106,10 @@ impl From<Heuristics> for WrappedHeuristics {
             .iter()
             .map(|x| WrappedMissedBranch {
                 prev_pc: x.prev_pc,
-                pc: x.pc,
+                dest_pc: x.dest_pc,
+                cond: x.cond,
                 distance: ruint_u256_to_bigint(&x.distance),
+                address_index: x.address_index,
             })
             .collect();
         let mut sha3_mapping = StdHashMap::new();

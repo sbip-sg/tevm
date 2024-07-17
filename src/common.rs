@@ -1,8 +1,11 @@
+use std::cmp::Ordering;
+
 /// Common constants, data structures and functions to be used by both rust-evm and revm
 use eyre::Result;
 use hex::ToHex;
 use num_bigint::BigInt;
 use primitive_types::H256;
+use revm::interpreter::instructions::i256::i256_cmp;
 use ruint::aliases::U256;
 use sha3::{Digest, Keccak256};
 
@@ -57,14 +60,20 @@ pub fn bigint_to_ruint_u256(b: &BigInt) -> Result<U256> {
         return Err(eyre::eyre!("BigInt is negative"));
     }
 
-    let mut padded_bytes = [0u8; 32];
     let bytes_len = bytes.len();
     if bytes_len > 32 {
         return Err(eyre::eyre!("BigInt is too large"));
     }
 
-    // Copy bytes into the end of the padded array
-    padded_bytes[(32 - bytes_len)..].copy_from_slice(&bytes);
+    Ok(U256::from_be_slice(&bytes))
+}
 
-    Ok(U256::from_be_slice(&padded_bytes))
+/// Returns the distance between two U256 numbers
+#[inline(always)]
+pub fn i256_diff(first: &U256, second: &U256) -> (U256, bool) {
+    match i256_cmp(first, second) {
+        Ordering::Equal => (U256::ZERO, false),
+        Ordering::Greater => first.overflowing_sub(*second),
+        Ordering::Less => second.overflowing_sub(*first),
+    }
 }

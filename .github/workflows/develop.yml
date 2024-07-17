@@ -12,6 +12,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+  TINYEVM_CI_TESTS: true
 
 jobs:
   Test:
@@ -23,9 +24,10 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - uses: actions-rs/toolchain@v1             # Rust toolchain
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
       with:
-        components: rustfmt, clippy
+        components: rustfmt, clippy, llvm-tools-preview
 
     - name: Get OS infomration
       id: os
@@ -53,27 +55,17 @@ jobs:
     - name: Install Python dependencies
       run: pip install -r requirements-dev.txt
 
-    - uses: webfactory/ssh-agent@v0.5.4
-      with:
-        ssh-private-key: |
-          ${{ secrets.SSH_PRIVATE_KEY_RUST_EVM }}
-          ${{ secrets.SSH_PRIVATE_KEY_REVM }}
-
     - name: Check code formatting
       run: cargo +stable fmt
 
     - name: Check code linting
-      run: cargo clippy --tests --benches --features linting
+      run: cargo clippy --all-targets --all-features -- -D warnings
 
     - name: Check documentation linting
-      run: cargo doc --no-deps --features linting
+      run: cargo doc --no-deps --all-features
 
     - name: Run Rust tests
       run: cargo nextest run
-
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        components: llvm-tools-preview
 
     - name: Install as local Python package
       uses: PyO3/maturin-action@v1

@@ -1,11 +1,7 @@
 use crate::CALL_DEPTH;
-use hashbrown::HashMap;
 use lazy_static::lazy_static;
 use revm::{
-    interpreter::{
-        CallInputs, CallOutcome, CallScheme, CallValue, CreateInputs, CreateOutcome,
-        InstructionResult,
-    },
+    interpreter::{CallInputs, CallOutcome, CallScheme, CallValue, InstructionResult},
     primitives::{Address, Bytes, Log as EvmLog, B256, U256},
     Database, EvmContext, Inspector,
 };
@@ -39,22 +35,21 @@ pub struct Log {
 }
 
 /// An inspector that collects call traces.
-#[derive(Debug)]
-pub struct LogsInspector<'a> {
+#[derive(Debug, Default)]
+pub struct LogInspector {
     /// Traced enabled?
     pub trace_enabled: bool,
     /// The collected traces
-    pub traces: &'a mut Vec<CallTrace>,
+    pub traces: Vec<CallTrace>,
     /// EVM events/logs collected during execution
-    pub logs: &'a mut Vec<Log>,
-    /// Overrides for addresses. Any address created in this map keys will be overriden with the value
-    pub override_addresses: &'a HashMap<Address, Address>,
+    pub logs: Vec<Log>,
 }
 
-impl<DB> Inspector<DB> for LogsInspector<'_>
+impl<DB> Inspector<DB> for LogInspector
 where
     DB: Database,
 {
+    #[inline]
     fn log(&mut self, _context: &mut EvmContext<DB>, evm_log: &EvmLog) {
         if !self.trace_enabled {
             return;
@@ -72,6 +67,7 @@ where
         });
     }
 
+    #[inline]
     fn call(
         &mut self,
         _context: &mut EvmContext<DB>,
@@ -116,6 +112,7 @@ where
         None
     }
 
+    #[inline]
     fn call_end(
         &mut self,
         _context: &mut EvmContext<DB>,
@@ -136,20 +133,5 @@ where
         }
 
         result
-    }
-
-    fn create_end(
-        &mut self,
-        _context: &mut EvmContext<DB>,
-        _inputs: &CreateInputs,
-        outcome: CreateOutcome,
-    ) -> CreateOutcome {
-        let CreateOutcome { result, address } = outcome;
-        if let Some(address) = address {
-            if let Some(override_address) = self.override_addresses.get(&address) {
-                return CreateOutcome::new(result, Some(*override_address));
-            }
-        }
-        CreateOutcome::new(result, address)
     }
 }

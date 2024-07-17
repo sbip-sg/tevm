@@ -1,11 +1,11 @@
 [package]
-name = "tevm"
-version = "0.1.0"
+name = "tinyevm"
+version = "1.0.0"
 edition = "2021"
 
 [lib]
 name="tinyevm"
-crate_type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "rlib"]
 path="src/lib.rs"
 
 [dependencies]
@@ -36,6 +36,8 @@ tokio = { version = "1.38.0", features = ["full"] }
 strum_macros = "0.26.4"
 hashbrown = "*"
 redis = { version= "0.25.4", optional = true}
+alloy = { version = "0.1.4", features = ["full"] }
+uuid = { version = "1.9.1", features = ["v4"] }
 
 [dev-dependencies]
 criterion = {version="0.3.6", features=["html_reports"] }
@@ -43,3 +45,22 @@ criterion = {version="0.3.6", features=["html_reports"] }
 [features]
 default = []
 redis=["dep:redis"]
+
+[[bench]]
+name = "general"
+harness = false
+
+[[bench]]
+name = "deploy"
+harness = false
+
+[[bench]]
+name = "infinite_loop"
+harness = false
+
+[[bench]]
+name = "function"
+harness = false
+
+[profile.bench]
+debug = true
