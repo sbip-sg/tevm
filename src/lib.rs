@@ -890,7 +890,7 @@ impl TinyEVM {
         let exe = &self.exe.as_ref().unwrap();
         macro_rules! hex2str {
             ($val:expr) => {
-                serde_json::to_string(&$val).unwrap()
+                format!("{:#066x}", $val)
             };
         }
 
