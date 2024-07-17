@@ -65,7 +65,6 @@ def deploy_contract(salt=None, owner='0x388C818CA8B9251b393131C08a736A67ccB19297
 
     data = encode(['uint256', 'string', 'string', 'uint256'], [_initialSupply, _name, _symbol, _decimals]).hex()
 
-    salt = None
     value = None
     init_value = 0x223312323
 

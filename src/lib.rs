@@ -18,7 +18,10 @@ use lazy_static::lazy_static;
 use num_bigint::BigInt;
 use pyo3::prelude::*;
 use response::{Response, SeenPcsMap, WrappedBug, WrappedHeuristics, WrappedMissedBranch};
-use revm::{inspector_handle_register, primitives::B256};
+use revm::{
+    inspector_handle_register,
+    primitives::{TxEnv, B256},
+};
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -123,6 +126,14 @@ pub fn enable_tracing() -> Result<()> {
 
 // Implementations for use in Rust
 impl TinyEVM {
+    pub fn exe_mut(&mut self) -> &mut Evm<'static, ChainInspector, TinyEvmDb> {
+        self.exe.as_mut().unwrap()
+    }
+
+    pub fn tx_mut(&mut self) -> &mut TxEnv {
+        self.exe_mut().tx_mut()
+    }
+
     fn db(&self) -> &ForkDB<DefaultProviderCache> {
         &self.exe.as_ref().unwrap().context.evm.db
     }
@@ -299,13 +310,6 @@ impl TinyEVM {
         }
         let result = self.exe.as_mut().unwrap().transact_commit();
 
-        // debug!("db {:?}", self.exe.as_ref().unwrap().db());
-        // debug!("sender {:?}", owner.encode_hex::<String>(),);
-
-        // // todo_cl temp check
-        // self.db = self.exe.as_ref().unwrap().db().clone();
-        // self.env = self.exe.as_ref().unwrap().context.evm.env.as_ref().clone();
-
         trace!("deploy result: {:?}", result);
 
         let collision = {
@@ -376,18 +380,16 @@ impl TinyEVM {
         CALL_DEPTH.get_or_default().set(0);
 
         {
-            let tx = self.exe.as_mut().unwrap().tx_mut();
+            let tx_gas_limit = tx_gas_limit.unwrap_or(self.tx_gas_limit);
+            let tx = self.tx_mut();
             tx.caller = sender;
             tx.transact_to = TransactTo::Call(contract);
             tx.data = data.into();
             tx.value = value;
-            tx.gas_limit = tx_gas_limit.unwrap_or(self.tx_gas_limit);
+            tx.gas_limit = tx_gas_limit;
         }
 
-        let result = {
-            let exe = self.exe.as_mut().unwrap();
-            exe.transact_commit()
-        };
+        let result = self.exe_mut().transact_commit();
 
         let addresses = self.created_addresses().clone();
         info!(
@@ -407,7 +409,7 @@ impl TinyEVM {
         let heuristics = self.heuristics().clone();
         let seen_pcs = self.pcs_by_address().clone();
 
-        let db = &self.exe.as_ref().unwrap().context.evm.db;
+        let db = &self.db();
         let ignored_addresses = db.ignored_addresses.clone();
         let ignored_addresses = ignored_addresses.into_iter().map(Into::into).collect();
 
@@ -429,7 +431,7 @@ impl TinyEVM {
 
     /// Set code of an account
     pub fn set_code_by_address(&mut self, addr: Address, code: Vec<u8>) -> Result<()> {
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
+        let db = &mut self.db_mut();
         let code = Bytecode::new_raw(code.into());
         let accounts = &db.accounts;
 
@@ -465,7 +467,7 @@ impl TinyEVM {
 
     /// Get code from an address
     pub fn get_code_by_address(&self, addr: Address) -> Result<Vec<u8>> {
-        let db = &self.exe.as_ref().unwrap().context.evm.db;
+        let db = &self.db();
         let accounts = &db.accounts;
         let account = accounts.get(&addr);
         if let Some(account) = account {
@@ -480,7 +482,7 @@ impl TinyEVM {
 
     /// Get Eth balance for an account
     pub fn get_eth_balance(&self, addr: Address) -> Result<U256> {
-        let db = &self.exe.as_ref().unwrap().context.evm.db;
+        let db = &self.db();
         let accounts = &db.accounts;
         if let Some(account) = accounts.get(&addr) {
             Ok(account.info.balance)
@@ -491,7 +493,7 @@ impl TinyEVM {
 
     /// Get storage by address and index
     pub fn get_storage_by_address(&self, addr: Address, index: U256) -> Result<U256> {
-        let db = &self.exe.as_ref().unwrap().context.evm.db;
+        let db = &self.db();
         let accounts = &db.accounts;
         let account = accounts
             .get(&addr)
@@ -509,7 +511,7 @@ impl TinyEVM {
         index: U256,
         value: U256,
     ) -> Result<()> {
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
+        let db = self.db_mut();
         db.insert_account_storage(addr, index, value)?;
         Ok(())
     }
@@ -713,6 +715,7 @@ impl TinyEVM {
     ///
     /// Returns a list consisting of 4 items `[reason, address-as-byte-array, bug_data, heuristics]`
     #[pyo3(signature = (contract_deploy_code, salt=None, owner=None, data=None, value=None, init_value=None, deploy_to_address=None))]
+    #[allow(clippy::too_many_arguments)]
     pub fn deterministic_deploy(
         &mut self,
         contract_deploy_code: String, // variable length
@@ -1084,7 +1087,7 @@ impl TinyEVM {
     /// Take a snapshot of an account, raise error if account does not exist in db
     pub fn take_snapshot(&mut self, address: String) -> Result<()> {
         let addr = Address::from_str(&address)?;
-        let db = &self.exe.as_ref().unwrap().context.evm.db;
+        let db = self.db();
         if let Some(account) = db.accounts.get(&addr) {
             self.snapshots.insert(addr, account.clone());
             Ok(())
@@ -1121,10 +1124,14 @@ impl TinyEVM {
     /// Restore a snapshot for an account, raise error if there is no snapshot for the account
     pub fn restore_snapshot(&mut self, address: String) -> Result<()> {
         let addr = Address::from_str(&address)?;
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
-        let account = self.snapshots.get(&addr).context("No snapshot found")?;
 
-        db.accounts.insert(addr, account.clone());
+        let account = {
+            self.snapshots
+                .get(&addr)
+                .context("No snapshot found")?
+                .clone()
+        };
+        self.db_mut().accounts.insert(addr, account);
         Ok(())
     }
 
