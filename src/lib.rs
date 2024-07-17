@@ -18,7 +18,7 @@ use lazy_static::lazy_static;
 use num_bigint::BigInt;
 use pyo3::prelude::*;
 use response::{Response, SeenPcsMap, WrappedBug, WrappedHeuristics, WrappedMissedBranch};
-use revm::inspector_handle_register;
+use revm::{inspector_handle_register, primitives::B256};
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -39,7 +39,7 @@ pub mod instrument;
 /// Provide response data structure from EVM
 pub mod response;
 pub use common::*;
-use hex::ToHex;
+use hex::{FromHex, ToHex};
 use instrument::{
     bug_inspector::BugInspector, log_inspector::LogInspector, BugData, Heuristics, InstrumentConfig,
 };
@@ -705,19 +705,20 @@ impl TinyEVM {
     /// - `owner`: Owner address as a 20-byte array encoded as hex string
     /// - `data`: (Optional, default empty) Constructor arguments encoded as hex string.
     /// - `value`: (Optional, default 0) a U256. Set the value to be included in the contract creation transaction.
-    /// - `deploy_to_address`: when provided, change the address of the deployed contract to this address
+    /// - `deploy_to_address`: when provided, change the address of the deployed contract to this address, otherwise deploy to a an address created using `owner.CREATE2(a_fixed_salt, codehash)`.
 
     ///   - This requires the constructor to be payable.
     ///   - The transaction sender (owner) must have enough balance
     /// - `init_value`: (Optional) BigInt. Override the initial balance of the contract to this value.
     ///
     /// Returns a list consisting of 4 items `[reason, address-as-byte-array, bug_data, heuristics]`
-    #[pyo3(signature = (contract_deploy_code, owner=None, data=None, value=None, init_value=None, deploy_to_address=None))]
+    #[pyo3(signature = (contract_deploy_code, salt=None, owner=None, data=None, value=None, init_value=None, deploy_to_address=None))]
     pub fn deterministic_deploy(
         &mut self,
         contract_deploy_code: String, // variable length
-        owner: Option<String>,        // h160 as hex string
-        data: Option<String>,         // variable length
+        salt: Option<String>, // h256 as hex string, has no effect if deploy_to_address is provided
+        owner: Option<String>, // h160 as hex string
+        data: Option<String>, // variable length
         value: Option<BigInt>,
         init_value: Option<BigInt>,
         deploy_to_address: Option<String>,
@@ -742,9 +743,23 @@ impl TinyEVM {
         let value = value.unwrap_or_default();
         let mut contract_bytecode = contract_deploy_code.to_vec();
         contract_bytecode.extend(data);
-        let force_address: Option<Address> = deploy_to_address
+
+        let salt = {
+            if let Some(salt) = salt {
+                let salt = &salt;
+                B256::from_hex(salt)?
+            } else {
+                B256::ZERO
+            }
+        };
+
+        let force_address: Address = deploy_to_address
             .map(|s| Address::from_str(&s))
-            .transpose()?;
+            .transpose()?
+            .unwrap_or_else(|| {
+                let codehash = keccak256(&contract_bytecode);
+                owner.create2(salt, codehash)
+            });
 
         let resp = {
             let resp = self.deploy_helper(
@@ -752,7 +767,7 @@ impl TinyEVM {
                 contract_bytecode,
                 bigint_to_ruint_u256(&value)?,
                 None,
-                force_address,
+                Some(force_address),
             )?;
 
             if let Some(balance) = init_value {

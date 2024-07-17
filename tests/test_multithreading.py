@@ -7,6 +7,8 @@ from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor
 
 
+salt = None
+
 def handle_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
@@ -33,7 +35,6 @@ def run_test():
     tevm = tinyevm.TinyEVM()
 
     contract_bytecode = open('tests/contracts/C.hex').read()
-    salt = None
     owner = '0x388C818CA8B9251b393131C08a736A67ccB19297'
     data = None
     value = None
@@ -43,8 +44,7 @@ def run_test():
     balance = tevm.get_balance(owner)
     tprint('balance before deployment: {}'.format(balance))
 
-    # todo update response object
-    resp = tevm.deterministic_deploy(contract_bytecode, owner, data, value, init_value)
+    resp = tevm.deterministic_deploy(contract_bytecode, salt, owner, data, value, init_value)
     tprint('Deployment resp: {}'.format(resp))
 
     assert resp.success
@@ -75,7 +75,6 @@ def run_infinite_loop():
     tevm = tinyevm.TinyEVM()
 
     contract_bytecode = open('tests/contracts/infinite_loop_Test.hex').read()
-    salt = None
     owner = '0x388C818CA8B9251b393131C08a736A67ccB19297'
     data = None
     value = None
@@ -86,7 +85,7 @@ def run_infinite_loop():
     tprint('balance before deployment: {}'.format(balance))
 
     # todo update response object
-    resp = tevm.deterministic_deploy(contract_bytecode, owner, data, value, init_value)
+    resp = tevm.deterministic_deploy(contract_bytecode, salt, owner, data, value, init_value)
     tprint('Deployment resp: {}'.format(resp))
 
     assert resp.success

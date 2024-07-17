@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use primitive_types::{H160, U256};
+use primitive_types::U256;
 use revm::primitives::Address;
 use tinyevm::{fn_sig_to_prefix, TinyEVM, UZERO};
 

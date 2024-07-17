@@ -199,12 +199,3 @@ test_global_snapshot[x_fns1-False-slowseq take and restore snapshot]     315.481
 test_global_snapshot[x_fns3-True-slowseq no snapshot]                    315.5748 (3.32)     328.8318 (3.24)     321.7635 (3.31)     5.0368 (2.12)     321.1631 (3.34)     7.1114 (2.42)          2;0   3.1079 (0.30)          5           1
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ```
-
-
-## Changes
-
-### 1.0.0
-
-Breaking changes:
-- `deterministic_deploy` signature is now changed to `deterministic_deploy(contract_deploy_code, owner=None, data=None, value=None, init_value=None, deploy_to_address=None)`, i.e., `salt` is removed. [Related to [REVM-1182](https://github.com/bluealloy/revm/issues/1182)]. If you want to similate the previous behaviour, it's suggested to use the `deploy_to_address` parameter to specify the address where the contract will be deployed.
-- `enabled` in `REVMConfig` is removed. To disable all instrumentation, use
