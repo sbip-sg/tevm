@@ -1148,6 +1148,8 @@ impl TinyEVM {
 /// REVM::InstrumentConfig
 #[pyclass(set_all, get_all)]
 pub struct REVMConfig {
+    /// Enable the bug detector instrumentation
+    pub enabled: bool,
     /// Enable recording seen PCs by current contract address
     pub pcs_by_address: bool,
     /// Enable heuristics which will record list of jumpi destinations
@@ -1191,6 +1193,7 @@ impl REVMConfig {
         };
 
         Ok(InstrumentConfig {
+            enabled: self.enabled,
             target_address,
             pcs_by_address: self.pcs_by_address,
             heuristics: self.heuristics,
@@ -1202,6 +1205,7 @@ impl REVMConfig {
     /// Convert to `REVMConfig` from internal Rust struct
     fn from(config: &InstrumentConfig) -> Self {
         Self {
+            enabled: config.enabled,
             pcs_by_address: config.pcs_by_address,
             heuristics: config.heuristics,
             record_branch_for_target_only: config.record_branch_for_target_only,

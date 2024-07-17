@@ -38,6 +38,10 @@ pub struct BugInspector {
 }
 
 impl BugInspector {
+    pub fn enabled(&self) -> bool {
+        self.instrument_config.enabled
+    }
+
     pub fn inc_step_index(&mut self) {
         self.step_index += 1;
     }
@@ -125,6 +129,10 @@ where
 {
     #[inline]
     fn step(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
+        if !self.enabled() {
+            return;
+        }
+
         let _ = interp;
         let _ = context;
         let opcode = interp.current_opcode();
@@ -183,6 +191,9 @@ where
 
     #[inline]
     fn step_end(&mut self, interp: &mut Interpreter, _context: &mut EvmContext<DB>) {
+        if !self.enabled() {
+            return;
+        }
         let address = interp.contract().target_address;
         let address_index = self.record_seen_address(address);
         let opcode = self.opcode;
@@ -528,6 +539,10 @@ where
         _inputs: &CreateInputs,
         outcome: CreateOutcome,
     ) -> CreateOutcome {
+        if !self.enabled() {
+            return outcome;
+        }
+
         let CreateOutcome { result, address } = &outcome;
         if let Some(address) = address {
             if let Some(override_address) = self.create_address_overrides.get(address) {
