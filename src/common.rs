@@ -60,16 +60,12 @@ pub fn bigint_to_ruint_u256(b: &BigInt) -> Result<U256> {
         return Err(eyre::eyre!("BigInt is negative"));
     }
 
-    let mut padded_bytes = [0u8; 32];
     let bytes_len = bytes.len();
     if bytes_len > 32 {
         return Err(eyre::eyre!("BigInt is too large"));
     }
 
-    // Copy bytes into the end of the padded array
-    padded_bytes[(32 - bytes_len)..].copy_from_slice(&bytes);
-
-    Ok(U256::from_be_slice(&padded_bytes))
+    Ok(U256::from_be_slice(&bytes))
 }
 
 /// Returns the distance between two U256 numbers

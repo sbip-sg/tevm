@@ -123,7 +123,6 @@ def reset_contract_call(contract, owner):
     resp = tevm.contract_call(contract, owner, data_balance_check, None)
     assert _initialSupply - 1000 == int.from_bytes(bytes(resp.data), 'big')
 
-
     random_address = '0x253397db4016dE1983D29f7DEc2901c54dB81A22'
     tevm.copy_snapshot(contract, random_address)
 

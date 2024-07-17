@@ -426,7 +426,7 @@ impl TinyEVM {
             transient_logs: logs,
             ignored_addresses,
         };
-        revm_result.into()
+        Response::from(revm_result)
     }
 
     /// Set code of an account
@@ -1119,6 +1119,8 @@ impl TinyEVM {
         bug_inspector.bug_data.clear();
         bug_inspector.created_addresses.clear();
         bug_inspector.heuristics = Default::default();
+        self.log_inspector_mut().traces.clear();
+        self.log_inspector_mut().logs.clear();
     }
 
     /// Restore a snapshot for an account, raise error if there is no snapshot for the account

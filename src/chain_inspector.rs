@@ -110,24 +110,4 @@ impl<DB: Database> Inspector<DB> for ChainInspector {
         }
         outcome
     }
-
-    // fn eofcreate(
-    //     &mut self,
-    //     context: &mut EvmContext<DB>,
-    //     inputs: &mut EOFCreateInputs,
-    // ) -> Option<CreateOutcome> {
-    //     None
-    // }
-
-    // fn eofcreate_end(
-    //     &mut self,
-    //     context: &mut EvmContext<DB>,
-    //     inputs: &EOFCreateInputs,
-    //     outcome: CreateOutcome,
-    // ) -> CreateOutcome {
-    //     outcome
-    // }
-
-    // #[inline]
-    // fn selfdestruct(&mut self, contract: Address, target: Address, value: U256) {}
 }
