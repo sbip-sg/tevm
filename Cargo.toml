@@ -45,3 +45,22 @@ criterion = {version="0.3.6", features=["html_reports"] }
 [features]
 default = []
 redis=["dep:redis"]
+
+[[bench]]
+name = "general"
+harness = false
+
+[[bench]]
+name = "deploy"
+harness = false
+
+[[bench]]
+name = "infinite_loop"
+harness = false
+
+[[bench]]
+name = "function"
+harness = false
+
+[profile.bench]
+debug = true

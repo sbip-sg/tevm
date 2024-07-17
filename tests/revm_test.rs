@@ -381,13 +381,21 @@ fn test_deterministic_deploy() {
         .deploy_helper(*OWNER, contract_deploy_bin.clone(), UZERO, None, None)
         .unwrap();
 
-    assert!(c1.success, "Deploy use salt 1 should succeed: {:?}", &c1);
+    assert!(
+        c1.success,
+        "Deploy by initial nonce should succeed: {:?}",
+        &c1
+    );
 
     let c2 = vm
         .deploy_helper(*OWNER, contract_deploy_bin, UZERO, None, None)
         .unwrap();
 
-    assert!(c2.success, "Deploy use salt 2 should succeed: {:?}", &c2);
+    assert!(
+        c2.success,
+        "Deploy by auto updated nonce  should succeed: {:?}",
+        &c2
+    );
 
     assert_ne!(c1.data, c2.data, "Address of c1 and c2 should not equal");
 }

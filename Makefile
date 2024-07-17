@@ -8,7 +8,7 @@ build:
 test:
 	cargo nextest run  --no-fail-fast --success-output=never
 	maturin develop --release
-	pytest -s --show-capture all
+	pytest -s
 bench:
 	cargo bench
 clean:
