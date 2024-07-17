@@ -138,10 +138,10 @@ x_fns_fastseq = [('fast_seq()', None),] * 1000
 x_fns_slowseq = [('slow_seq()', None), ] * 100
 
 @pytest.mark.parametrize("x_fns, disable_snapshot, name", [
-    (x_fns_fastseq, False, "fastseq take and restore snapshot"),
-    (x_fns_slowseq, False, "slowseq take and restore snapshot"),
-    (x_fns_fastseq, True, "fastseq no snapshot"),
-    (x_fns_slowseq, True, "slowseq no snapshot"),
+    (x_fns_fastseq, False, "fastseq, plus take and restore snapshot"),
+    (x_fns_slowseq, False, "slowseq, plus take and restore snapshot"),
+    (x_fns_fastseq, True, "fastseq"),
+    (x_fns_slowseq, True, "slowseq"),
 ])
 def test_global_snapshot(benchmark, x_fns, disable_snapshot, name):
     global tevm

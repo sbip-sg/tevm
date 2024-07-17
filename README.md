@@ -156,66 +156,50 @@ Additionally, you must set the environment variable `TINYEVM_REDIS_NODE` to a va
 
 ## Global snapshot benchmarks
 
-* Using the naive implementation which clones the whole data structure
+To run the test:
 
 ``` bash
+maturing develop --release
+pytest -s --show-capture all    tests/test_global_snapshot.py
+```
+
+
+* Results from legacy Tinyevm (using instrumented REVM) commit `839b0b8822702b49096bc2bf3f092c7a1aab13a3`:
+
+``` text
 ============================================================================================================= test session starts ==============================================================================================================
 platform linux -- Python 3.9.7, pytest-7.2.2, pluggy-1.0.0
 benchmark: 4.0.0 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
 rootdir: /home/garfield/projects/sbip-sg/tinyevm
 plugins: cov-4.1.0, web3-5.31.2, hypothesis-6.82.0, anyio-3.6.2, benchmark-4.0.0, xdist-3.3.1
-collected 7 items
+collected 5 items
 
-tests/test_global_snapshot.py ......Filename: /home/garfield/projects/sbip-sg/tinyevm/tests/test_global_snapshot.py
+...
+...
 
-Line #    Mem usage    Increment  Occurrences   Line Contents
-=============================================================
-   153     97.3 MiB     97.3 MiB           1   @profile
-   154                                         def test_compare_memory():
-   155     97.3 MiB      0.0 MiB        1002       x_fns_fastseq = [('fast_seq()', 1 + 5 * i) for i in range(1, 1000)]
-   156     97.3 MiB      0.0 MiB         102       x_fns_slowseq = [('slow_seq()', 1 + 5 * 50 * i) for i in range(1, 100)]
-   157                                             global tevm
-   158
-   159                                             # Running fastseq taking 100 snapshots
-   160     97.3 MiB      0.0 MiB           1       tevm = tinyevm.TinyEVM()
-   161     97.3 MiB      0.0 MiB           1       gc.collect()
-   162    363.6 MiB    266.2 MiB           1       run_global_snapshot(True, x_fns_fastseq, take_snapshot_after_each_tx=True)
-   163
-   164                                             # Running slowseq taking 100 snapshots
-   165    217.3 MiB   -146.3 MiB           1       tevm = tinyevm.TinyEVM()
-   166    217.3 MiB      0.0 MiB           1       gc.collect()
-   167    229.4 MiB     12.1 MiB           1       run_global_snapshot(True, x_fns_slowseq, take_snapshot_after_each_tx=True)
-   168
-   169                                             # Running 1000 fastseq without taking snapshots
-   170    150.0 MiB    -79.4 MiB           1       tevm = tinyevm.TinyEVM()
-   171    150.0 MiB      0.0 MiB           1       gc.collect()
-   172    150.0 MiB      0.0 MiB           1       run_global_snapshot(True, x_fns_fastseq, disable_snapshot=True)
-   173
-   174                                             # Running 100 slowseq without taking snapshots
-   175    150.0 MiB      0.0 MiB           1       tevm = tinyevm.TinyEVM()
-   176    150.0 MiB      0.0 MiB           1       gc.collect()
-   177    150.0 MiB      0.0 MiB           1       run_global_snapshot(True, x_fns_slowseq, disable_snapshot=True)
-
-
-.
-
-
------------------------------------------------------------------------------------------------------------------------------------- benchmark: 6 tests -----------------------------------------------------------------------------------------------------------------------------------
-Name (time in us)                                                                                               Min                   Max                  Mean              StdDev                Median                 IQR            Outliers         OPS            Rounds  Iterations
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-test_global_snapshot[False-x_fns4-True-fastseq don't take snapshot]                                        380.7210 (1.0)        864.9290 (1.0)        414.0279 (1.0)       47.1819 (1.0)        399.9720 (1.0)       14.6963 (1.0)       126;194  2,415.2963 (1.0)        1917           1
-test_global_snapshot[False-x_fns1-False-fastseq take and restore snapshot, don't keep after restore]       395.2560 (1.04)     1,188.2490 (1.37)       432.9322 (1.05)      71.7241 (1.52)       408.4960 (1.02)      25.4053 (1.73)      165;235  2,309.8306 (0.96)       1899           1
-test_global_snapshot[True-x_fns0-False-fastseq take and restore snapshot, keep after restore]              405.6830 (1.07)     1,157.2750 (1.34)       491.9984 (1.19)     129.4663 (2.74)       421.2585 (1.05)     100.5715 (6.84)        99;86  2,032.5268 (0.84)        448           1
-test_global_snapshot[False-x_fns5-True-slowseq don't take snapshot]                                      4,965.2520 (13.04)    7,654.7660 (8.85)     5,348.2192 (12.92)    419.9397 (8.90)     5,206.4350 (13.02)    247.7357 (16.86)       12;12    186.9781 (0.08)        173           1
-test_global_snapshot[False-x_fns3-False-slowseq take and restore snapshot, don't keep after restore]     4,989.4110 (13.11)    9,267.5720 (10.71)    5,320.8998 (12.85)    383.5033 (8.13)     5,216.9890 (13.04)    197.7330 (13.45)        7;11    187.9381 (0.08)        171           1
-test_global_snapshot[True-x_fns2-False-slowseq take and restore snapshot, keep after restore]            5,056.2300 (13.28)    7,849.9280 (9.08)     5,392.2435 (13.02)    327.4688 (6.94)     5,311.0770 (13.28)    268.5015 (18.27)        15;6    185.4516 (0.08)        176           1
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-Legend:
-  Outliers: 1 Standard Deviation from Mean; 1.5 IQR (InterQuartile Range) from 1st Quartile and 3rd Quartile.
-  OPS: Operations Per Second, computed as 1 / Mean
-============================================================================================================== 7 passed in 8.21s ===============================================================================================================
+------------------------------------------------------------------------------------------------------------- benchmark: 4 tests ------------------------------------------------------------------------------------------------------------
+Name (time in ms)                                                             Min                 Max                Mean             StdDev              Median                IQR            Outliers     OPS            Rounds  Iterations
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+test_global_snapshot[x_fns2-True-fastseq no snapshot]                    118.6619 (1.0)      124.2569 (1.0)      122.1113 (1.0)       1.7266 (1.0)      122.0048 (1.0)       1.8421 (1.0)           2;1  8.1892 (1.0)           8           1
+test_global_snapshot[x_fns0-False-fastseq take and restore snapshot]     123.2069 (1.04)     131.6260 (1.06)     126.0777 (1.03)      3.4155 (1.98)     124.7658 (1.02)      5.4766 (2.97)          2;0  7.9316 (0.97)          8           1
+test_global_snapshot[x_fns1-False-slowseq take and restore snapshot]     448.7344 (3.78)     490.6087 (3.95)     466.8714 (3.82)     18.1452 (10.51)    456.7645 (3.74)     29.2119 (15.86)         1;0  2.1419 (0.26)          5           1
+test_global_snapshot[x_fns3-True-slowseq no snapshot]                    453.6979 (3.82)     516.7671 (4.16)     473.7815 (3.88)     25.0584 (14.51)    463.8226 (3.80)     25.1137 (13.63)         1;0  2.1107 (0.26)          5           1
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ```
+
+* Results from the current branch:
+
+``` text
+------------------------------------------------------------------------------------------------------------ benchmark: 4 tests ------------------------------------------------------------------------------------------------------------
+Name (time in ms)                                                             Min                 Max                Mean            StdDev              Median               IQR            Outliers      OPS            Rounds  Iterations
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+test_global_snapshot[x_fns2-True-fastseq no snapshot]                     95.1790 (1.0)      101.4989 (1.0)       97.1787 (1.0)      2.3811 (1.0)       96.0393 (1.0)      2.9408 (1.0)           2;0  10.2903 (1.0)          10           1
+test_global_snapshot[x_fns0-False-fastseq take and restore snapshot]     101.7576 (1.07)     111.5388 (1.10)     106.1005 (1.09)     2.9359 (1.23)     106.2893 (1.11)     4.1448 (1.41)          3;0   9.4250 (0.92)         10           1
+test_global_snapshot[x_fns1-False-slowseq take and restore snapshot]     315.4810 (3.31)     337.3184 (3.32)     327.1796 (3.37)     8.0853 (3.40)     329.3743 (3.43)     9.8087 (3.34)          2;0   3.0564 (0.30)          5           1
+test_global_snapshot[x_fns3-True-slowseq no snapshot]                    315.5748 (3.32)     328.8318 (3.24)     321.7635 (3.31)     5.0368 (2.12)     321.1631 (3.34)     7.1114 (2.42)          2;0   3.1079 (0.30)          5           1
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+```
+
 
 ## Changes
 
