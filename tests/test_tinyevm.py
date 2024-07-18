@@ -2,7 +2,7 @@ import tinyevm
 import unittest
 from Crypto.Hash import keccak
 
-salt = None
+salt = '0x01'
 
 def fn_sig(sig):
     k = keccak.new(digest_bits=256)

@@ -401,6 +401,19 @@ fn test_deterministic_deploy() {
 }
 
 #[test]
+fn test_deterministic_deploy_fail() {
+    use hex_literal::hex;
+    let constructor_revert_bin = hex!("6080604052348015600f57600080fd5b600080fdfe");
+    let constructor_revert_bin = constructor_revert_bin.to_vec();
+    let mut vm = TinyEVM::default();
+    let c = vm
+        .deploy_helper(*OWNER, constructor_revert_bin.clone(), UZERO, None, None)
+        .unwrap();
+
+    assert!(!c.success, "Deploy invalid deployment binary should fail",);
+}
+
+#[test]
 fn test_deterministic_deploy_overwrite() -> Result<()> {
     setup();
     let contract_deploy_hex = include_str!("../tests/contracts/coverage.hex");
