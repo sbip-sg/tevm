@@ -772,13 +772,11 @@ impl TinyEVM {
                 Some(force_address),
             )?;
 
-            if !resp.success {
-                // todo return reverted
-            }
-
-            if let Some(balance) = init_value {
-                let address = Address::from_slice(&resp.data);
-                self.set_account_balance(address, bigint_to_ruint_u256(&balance)?)?;
+            if resp.success {
+                if let Some(balance) = init_value {
+                    let address = Address::from_slice(&resp.data);
+                    self.set_account_balance(address, bigint_to_ruint_u256(&balance)?)?;
+                }
             }
 
             resp
