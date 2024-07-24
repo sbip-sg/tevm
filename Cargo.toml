@@ -63,5 +63,9 @@ harness = false
 name = "function"
 harness = false
 
+[[bench]]
+name = "conversion"
+harness = false
+
 [profile.bench]
-debug = true
+debug = false
