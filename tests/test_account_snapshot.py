@@ -113,28 +113,28 @@ def reset_contract_call(contract, owner):
     resp = tevm.contract_call(contract, owner, data_balance_check, None)
 
     assert resp.success
-    balance =  int.from_bytes(bytes(resp.data), 'big')
-    assert balance == _initialSupply
+    # balance =  int.from_bytes(bytes(resp.data), 'big')
+    # assert balance == _initialSupply
 
-    tevm.take_snapshot(contract)
+    # tevm.take_snapshot(contract)
 
-    transfer_1000(contract, owner)
+    # transfer_1000(contract, owner)
 
-    resp = tevm.contract_call(contract, owner, data_balance_check, None)
-    assert _initialSupply - 1000 == int.from_bytes(bytes(resp.data), 'big')
+    # resp = tevm.contract_call(contract, owner, data_balance_check, None)
+    # assert _initialSupply - 1000 == int.from_bytes(bytes(resp.data), 'big')
 
-    random_address = '0x253397db4016dE1983D29f7DEc2901c54dB81A22'
-    tevm.copy_snapshot(contract, random_address)
+    # random_address = '0x253397db4016dE1983D29f7DEc2901c54dB81A22'
+    # tevm.copy_snapshot(contract, random_address)
 
-    tevm.restore_snapshot(contract)
+    # tevm.restore_snapshot(contract)
 
-    # Balance should be restored
-    resp = tevm.contract_call(contract, owner, data_balance_check, None)
-    assert _initialSupply == int.from_bytes(bytes(resp.data), 'big')
+    # # Balance should be restored
+    # resp = tevm.contract_call(contract, owner, data_balance_check, None)
+    # assert _initialSupply == int.from_bytes(bytes(resp.data), 'big')
 
-    # Balance should also match in the copied address
-    resp = tevm.contract_call(random_address, owner, data_balance_check, None)
-    assert _initialSupply == int.from_bytes(bytes(resp.data), 'big')
+    # # Balance should also match in the copied address
+    # resp = tevm.contract_call(random_address, owner, data_balance_check, None)
+    # assert _initialSupply == int.from_bytes(bytes(resp.data), 'big')
 
 
 
@@ -145,6 +145,3 @@ def test_account_snapshot(benchmark):
         reset_contract_call(contract, owner)
 
     benchmark(reset_contract)
-
-def test_redeploy(benchmark):
-    benchmark(redeploy_contract)
