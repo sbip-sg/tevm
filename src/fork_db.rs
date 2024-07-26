@@ -174,7 +174,9 @@ impl<T: ProviderCache> ForkDB<T> {
         let mut changed = false;
         if let Some(code) = &account.code {
             if !code.is_empty() {
-                account.code_hash = keccak256(code.bytecode());
+                if account.code_hash == KECCAK_EMPTY {
+                    account.code_hash = code.hash_slow();
+                }
                 self.contracts
                     .entry(account.code_hash)
                     .or_insert_with(|| code.clone());
@@ -317,6 +319,7 @@ impl<T: ProviderCache> DatabaseCommit for ForkDB<T> {
             if !account.is_touched() {
                 continue;
             }
+
             if account.is_selfdestructed() {
                 let db_account = self.accounts.entry(address).or_default();
                 db_account.storage.clear();
