@@ -13,7 +13,6 @@ use revm::primitives::{
 };
 use revm::{Database, DatabaseCommit};
 use std::env;
-use std::hash::Hash;
 use tracing::{debug, info, trace};
 
 #[derive(Debug, Default)]
