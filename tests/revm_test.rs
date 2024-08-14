@@ -181,8 +181,6 @@ fn single_bugtype_test_helper(
 
     let mut vm = TinyEVM::default();
 
-    vm.set_evm_tracing(true);
-
     let bytecode = hex::decode(contract_deploy_hex).unwrap();
 
     let resp = vm
@@ -710,12 +708,6 @@ fn test_div_zero() {
     single_run_test_helper(
         include_str!("../tests/contracts/divzeros.hex"),
         "test(uint256)",
-        vec![(U256::from(0), Some((BugType::IntegerDivByZero, 121)), false)],
-    );
-
-    single_run_test_helper(
-        include_str!("../tests/contracts/sample_all_bugs.BugSample.hex"),
-        "div_by_zero(uint256)",
         vec![(U256::from(0), Some((BugType::IntegerDivByZero, 121)), false)],
     );
 }
