@@ -27,8 +27,6 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - uses: actions-rs/toolchain@v1             # Rust toolchain
-
     - name: Get OS infomration
       id: os
       run: echo "KERNEL=$(uname -r)" >> $GITHUB_OUTPUT
