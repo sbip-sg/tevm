@@ -18,9 +18,6 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
     steps:
 
     - uses: actions/checkout@v3                 # Git toolchain to check out code
@@ -42,11 +39,6 @@ jobs:
           target/
         key: ${{ runner.os }}-${{steps.os.outputs.KERNEL}}-${{ hashFiles('**/Cargo.toml') }}
 
-    - uses: webfactory/ssh-agent@v0.5.4
-      with:
-        ssh-private-key: |
-          ${{ secrets.SSH_PRIVATE_KEY_RUST_EVM }}
-          ${{ secrets.SSH_PRIVATE_KEY_REVM }}
 
     - uses: actions/setup-python@v4
       with:
