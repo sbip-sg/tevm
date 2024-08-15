@@ -16,7 +16,7 @@ jobs:
   release:
     name: Build and publish binaries
 
-    runs-on: ubuntu-focal
+    runs-on: ubuntu-20.04
 
     steps:
 
