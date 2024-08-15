@@ -1,0 +1,34 @@
+[build-system]
+requires = ["maturin>=0.11,<0.12"]
+build-backend = "maturin"
+
+[project]
+name = "tinyevm"
+description = "EVM executor for Python for bug detection"
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["tinyevm", "python"]
+classifier = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Rust",
+]
+dependencies = [
+    "pycryptodome>=3.10.1",
+    "eth_abi",
+]
+
+[project.urls]
+documentation = "https://github.com/sbip-sg/tevm"
+repository = "https://github.com/sbip-sg/tevm"
+
+[tool.isort]
+profile = "black"
