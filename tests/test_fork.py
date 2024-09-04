@@ -21,5 +21,4 @@ class TestTinyEVM(unittest.TestCase):
         fork_url = "https://eth.llamarpc.com"
         tevm = tinyevm.TinyEVM(fork_url, 17890805)
 
-        tevm.contract_call('0x8ee335785a9c08219CEf04d46f1f01865F102Bf4')
         assert 1378414300424348501 == tevm.get_balance('0x8ee335785a9c08219CEf04d46f1f01865F102Bf4')

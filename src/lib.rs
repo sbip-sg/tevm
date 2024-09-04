@@ -21,6 +21,7 @@ use response::{Response, SeenPcsMap, WrappedBug, WrappedHeuristics, WrappedMisse
 use revm::{
     inspector_handle_register,
     primitives::{TxEnv, B256},
+    Database,
 };
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
@@ -466,12 +467,11 @@ impl TinyEVM {
     }
 
     /// Get code from an address
-    pub fn get_code_by_address(&self, addr: Address) -> Result<Vec<u8>> {
-        let db = &self.db();
-        let accounts = &db.accounts;
-        let account = accounts.get(&addr);
+    pub fn get_code_by_address(&mut self, addr: Address) -> Result<Vec<u8>> {
+        let db = self.db_mut();
+        let account = db.basic(addr)?;
         if let Some(account) = account {
-            let code = &account.info.code;
+            let code = &account.code;
             if let Some(code) = code {
                 return Ok(code.bytecode().to_vec());
             }
@@ -481,14 +481,10 @@ impl TinyEVM {
     }
 
     /// Get Eth balance for an account
-    pub fn get_eth_balance(&self, addr: Address) -> Result<U256> {
-        let db = &self.db();
-        let accounts = &db.accounts;
-        if let Some(account) = accounts.get(&addr) {
-            Ok(account.info.balance)
-        } else {
-            Ok(U256::ZERO)
-        }
+    pub fn get_eth_balance(&mut self, addr: Address) -> Result<U256> {
+        let db = self.db_mut();
+        let account = db.basic(addr)?;
+        Ok(account.unwrap_or_default().balance)
     }
 
     /// Get storage by address and index
@@ -854,7 +850,7 @@ impl TinyEVM {
     }
 
     /// Return account's balance in wei
-    pub fn get_balance(&self, addr: String) -> Result<BigInt> {
+    pub fn get_balance(&mut self, addr: String) -> Result<BigInt> {
         let addr = Address::from_str(trim_prefix(&addr, "0x"))?;
 
         let balance = self.get_eth_balance(addr)?;
@@ -873,7 +869,7 @@ impl TinyEVM {
     }
 
     /// Get account's code
-    pub fn get_code(&self, addr: String) -> Result<String> {
+    pub fn get_code(&mut self, addr: String) -> Result<String> {
         let addr = Address::from_str(&addr)?;
 
         let code: String = self.get_code_by_address(addr)?.encode_hex();
