@@ -7,10 +7,10 @@ use ::revm::{
     },
     Evm,
 };
+use alloy::{providers::ProviderBuilder, transports::http::reqwest::Url};
 use cache::DefaultProviderCache;
 use chain_inspector::ChainInspector;
 use dotenv::dotenv;
-use ethers_providers::{Http, Provider};
 use eyre::{eyre, ContextCompat, Result};
 use fork_db::ForkDB;
 use hashbrown::{HashMap, HashSet};
@@ -548,7 +548,7 @@ impl TinyEVM {
             Some(ref url) => {
                 info!("Starting EVM from fork {} and block: {:?}", url, block_id);
                 let runtime = Runtime::new().expect("Create runtime failed");
-                let provider = Provider::<Http>::try_from(url)?;
+                let provider = ProviderBuilder::new().on_http(Url::parse(url)?);
                 let provider = ForkProvider::new(provider, runtime);
                 ForkDB::create_with_provider(Some(provider), block_id)
             }
@@ -562,19 +562,17 @@ impl TinyEVM {
 
         if fork_enabled {
             let block = db.get_fork_block().unwrap();
-            let block_number = block.number.expect("Failed to get block number").as_u64();
+            let block_number = block.header.number.expect("Failed to get block number");
             info!("Using block number: {:?}", block_number);
 
             env.block.number = U256::from(block_number);
-            env.block.timestamp = U256::from_limbs(block.timestamp.0);
-            env.block.difficulty = U256::from_limbs(block.difficulty.0);
-            env.block.gas_limit = U256::from_limbs(block.gas_limit.0);
+            env.block.timestamp = U256::from(block.header.timestamp);
+            env.block.difficulty = block.header.difficulty;
+            env.block.gas_limit = U256::from(block.header.gas_limit);
+            env.block.coinbase = block.header.miner;
             env.cfg.disable_base_fee = true;
-            if let Some(base_fee) = block.base_fee_per_gas {
-                env.block.basefee = U256::from_limbs(base_fee.0);
-            }
-            if let Some(coinbase) = block.author {
-                env.block.coinbase = Address::from(coinbase.0);
+            if let Some(base_fee) = block.header.base_fee_per_gas {
+                env.block.basefee = U256::from(base_fee);
             }
         }
 
@@ -704,7 +702,7 @@ impl TinyEVM {
     /// - `data`: (Optional, default empty) Constructor arguments encoded as hex string.
     /// - `value`: (Optional, default 0) a U256. Set the value to be included in the contract creation transaction.
     /// - `deploy_to_address`: when provided, change the address of the deployed contract to this address, otherwise deploy to a an address created using `owner.CREATE2(a_fixed_salt, codehash)`.
-
+    ///
     ///   - This requires the constructor to be payable.
     ///   - The transaction sender (owner) must have enough balance
     /// - `init_value`: (Optional) BigInt. Override the initial balance of the contract to this value.

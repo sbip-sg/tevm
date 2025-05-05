@@ -1,17 +1,24 @@
-use ethers::types::{Block, BlockId, Bytes, TxHash, H256};
-use ethers_providers::{Http, Middleware, Provider};
+use alloy::{
+    eips::BlockId,
+    providers::{Provider, RootProvider},
+    rpc::types::{Block, BlockTransactionsKind},
+    transports::http::{Client, Http},
+};
+
 use eyre::Result;
 use hex::FromHex;
-use primitive_types::{H160, U256};
-use revm::primitives::Address;
+use revm::primitives::{Address, Bytes};
+use ruint::aliases::U256;
 use tokio::runtime::Runtime;
 use tracing::debug;
 
 use crate::cache::ProviderCache;
 
+pub type AlloyHttpProvider = RootProvider<Http<Client>>;
+
 #[derive(Debug)]
 pub struct ForkProvider<T: ProviderCache> {
-    provider: Provider<Http>,
+    provider: AlloyHttpProvider,
     cache: T,
     runtime: Runtime,
 }
@@ -27,7 +34,7 @@ impl<T: ProviderCache> Clone for ForkProvider<T> {
 }
 
 impl<T: ProviderCache> ForkProvider<T> {
-    pub fn new(provider: Provider<Http>, runtime: Runtime) -> Self {
+    pub fn new(provider: AlloyHttpProvider, runtime: Runtime) -> Self {
         Self {
             provider,
             runtime,
@@ -41,8 +48,8 @@ impl<T: ProviderCache> ForkProvider<T> {
 
     /// Returns the latest block number on chain
     pub fn get_block_number(&self) -> Result<u64> {
-        let block_number = self.block_on(async { self.provider.get_block_number().await })?;
-        Ok(block_number.as_u64())
+        let number = self.block_on(async { self.provider.get_block_number().await })?;
+        Ok(number)
     }
 
     /// Get the nonce of an address
@@ -50,32 +57,28 @@ impl<T: ProviderCache> ForkProvider<T> {
         &mut self,
         address: &Address,
         block_number: Option<u64>,
-    ) -> Result<U256> {
+    ) -> Result<u64> {
         let address_str = format!("{:x}", address);
         if let Some(block_number) = block_number {
             if let Ok(cached) =
                 self.cache
                     .get("eth", block_number, "eth_getTransactionCount", &address_str)
             {
-                return Ok(U256::from_str_radix(cached.as_str(), 16).unwrap());
+                return Ok(u64::from_str_radix(cached.as_str(), 16).unwrap());
             }
         }
 
         let block_id = block_number.map(BlockId::from);
         let nonce = self.block_on(async {
-            let addr = H160::from_slice(address.0.as_slice());
-            self.provider.get_transaction_count(addr, block_id).await
+            if let Some(block_id) = block_id {
+                self.provider
+                    .get_transaction_count(*address)
+                    .block_id(block_id)
+                    .await
+            } else {
+                self.provider.get_transaction_count(*address).await
+            }
         })?;
-
-        if let Some(block_number) = block_number {
-            self.cache.store(
-                "eth",
-                block_number,
-                "eth_getTransactionCount",
-                &address_str,
-                &format!("{:x}", nonce),
-            )?;
-        }
 
         Ok(nonce)
     }
@@ -94,8 +97,12 @@ impl<T: ProviderCache> ForkProvider<T> {
 
         let block_id = block_number.map(BlockId::from);
         let balance = self.block_on(async {
-            let addr = H160::from_slice(address.0.as_slice());
-            self.provider.get_balance(addr, block_id).await
+            let rpc = self.provider.get_balance(*address);
+            if let Some(block_id) = block_id {
+                rpc.block_id(block_id).await
+            } else {
+                rpc.await
+            }
         })?;
 
         if let Some(block_number) = block_number {
@@ -124,8 +131,12 @@ impl<T: ProviderCache> ForkProvider<T> {
 
         let block_id = block_number.map(BlockId::from);
         let code = self.block_on(async {
-            let addr = H160::from_slice(address.0.as_slice());
-            self.provider.get_code(addr, block_id).await
+            let rpc = self.provider.get_code_at(*address);
+            if let Some(block_id) = block_id {
+                rpc.block_id(block_id).await
+            } else {
+                rpc.await
+            }
         })?;
 
         if let Some(block_number) = block_number {
@@ -140,7 +151,7 @@ impl<T: ProviderCache> ForkProvider<T> {
         Ok(code)
     }
 
-    pub fn get_block(&mut self, block_number: u64) -> Result<Option<Block<TxHash>>> {
+    pub fn get_block(&mut self, block_number: u64) -> Result<Option<Block>> {
         if let Ok(cached) = self.cache.get(
             "eth",
             block_number,
@@ -150,8 +161,11 @@ impl<T: ProviderCache> ForkProvider<T> {
             return Ok(Some(serde_json::from_str(&cached).unwrap()));
         }
 
-        let block_id = BlockId::from(block_number);
-        let block = self.block_on(async { self.provider.get_block(block_id).await })?;
+        let block = self.block_on(async {
+            self.provider
+                .get_block(BlockId::from(block_number), BlockTransactionsKind::Hashes)
+                .await
+        })?;
 
         let _ = self.cache.store(
             "eth",
@@ -166,9 +180,9 @@ impl<T: ProviderCache> ForkProvider<T> {
     pub fn get_storage_at(
         &mut self,
         address: &Address,
-        index: &H256,
+        index: &U256,
         block_number: Option<u64>,
-    ) -> Result<H256> {
+    ) -> Result<U256> {
         let store_key = format!("{:x}-{:x}", address, index);
 
         if let Some(block_number) = block_number {
@@ -176,14 +190,18 @@ impl<T: ProviderCache> ForkProvider<T> {
                 .cache
                 .get("eth", block_number, "eth_getStorageAt", &store_key)
             {
-                return Ok(H256::from_slice(&hex::decode(cached).unwrap()));
+                return Ok(U256::from_str_radix(&cached, 16)?);
             }
         }
 
         let block_id = block_number.map(BlockId::from);
         let storage = self.block_on(async {
-            let addr = H160::from_slice(address.0.as_slice());
-            self.provider.get_storage_at(addr, *index, block_id).await
+            let rpc = self.provider.get_storage_at(*address, *index);
+            if let Some(block_id) = block_id {
+                rpc.block_id(block_id).await
+            } else {
+                rpc.await
+            }
         })?;
 
         debug!(
