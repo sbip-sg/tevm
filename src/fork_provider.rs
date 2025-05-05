@@ -1,12 +1,12 @@
 use alloy::{
     eips::BlockId,
+    hex::FromHex,
     providers::{Provider, RootProvider},
     rpc::types::{Block, BlockTransactionsKind},
     transports::http::{Client, Http},
 };
 
 use eyre::Result;
-use hex::FromHex;
 use revm::primitives::{Address, Bytes};
 use ruint::aliases::U256;
 use tokio::runtime::Runtime;
