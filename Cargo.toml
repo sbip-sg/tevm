@@ -9,7 +9,7 @@ crate-type = ["cdylib", "rlib"]
 path="src/lib.rs"
 
 [dependencies]
-openssl = "0.10.72"
+openssl = { version="0.10.72", features = ["vendored"] }
 ring = "0.17.12"
 
 eyre = { version = "0.6.12" }
