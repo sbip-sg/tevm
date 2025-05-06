@@ -50,7 +50,8 @@ jobs:
 
     - name: Build with file system cache
       run: |
-        maturin build --release --python ${{ env.pythonLocation }}/bin/python -o _fs
+        maturin build --release -i ${{ env.pythonLocation }}/bin/python -o _fs
+
 
     - name: Make _out directory
       run: |
@@ -65,8 +66,7 @@ jobs:
 
     - name: Build with redis cache
       run: |
-        maturin build --release --python ${{ env.pythonLocation }}/bin/python --cargo-extra-args="--features redis" -o _redis
-
+        maturin build --release -i ${{ env.pythonLocation }}/bin/python --cargo-extra-args="--features redis" -o _redis
 
     - name: Rename .whl files
       run: |
