@@ -1,5 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use primitive_types::H256;
+use criterion::{Criterion, criterion_group, criterion_main};
 use revm::primitives::Address;
 use ruint::aliases::U256;
 use tinyevm::{TinyEVM, UZERO};
@@ -44,19 +43,10 @@ fn bench_contract_deploy_on_different_executors(c: &mut Criterion) {
     });
 }
 
-#[allow(unused)]
-fn bench_random_h256(c: &mut Criterion) {
-    c.bench_function("call H256 random", |b| {
-        b.iter(|| {
-            let _ = H256::random();
-        })
-    });
-}
-
 criterion_group!(
     name = deploy;
     config = Criterion::default();
-    targets = bench_random_h256, bench_contract_deterministic_deploy, bench_contract_deploy_on_different_executors
+    targets = bench_contract_deterministic_deploy, bench_contract_deploy_on_different_executors
 );
 
 criterion_main!(deploy);

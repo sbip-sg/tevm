@@ -4,7 +4,7 @@ use eyre::{ContextCompat, Result};
 use hex::ToHex;
 use lazy_static::lazy_static;
 use num_bigint::BigInt;
-use primitive_types::{H160, H256};
+use rand::random;
 use revm::interpreter::opcode::{self, CREATE, CREATE2, SELFDESTRUCT};
 use revm::primitives::Address;
 use ruint::aliases::U256;
@@ -18,8 +18,8 @@ use tinyevm::instrument::bug::{Bug, BugType, MissedBranch};
 use tracing::warn;
 
 use tinyevm::{
-    enable_tracing, fn_sig_to_prefix, ruint_u256_to_bigint, trim_prefix, TinyEVM, TX_GAS_LIMIT,
-    UZERO,
+    TX_GAS_LIMIT, TinyEVM, UZERO, enable_tracing, fn_sig_to_prefix, ruint_u256_to_bigint,
+    trim_prefix,
 };
 
 const TRANSFER_TOKEN_VALUE: u64 = 9999;
@@ -67,7 +67,7 @@ macro_rules! deploy_hex {
         );
 
         println!("Contract deployed to {}", resp.data.encode_hex::<String>());
-        let $addr = H160::from_slice(&resp.data);
+        let $addr = Address::from_slice(&resp.data);
     };
 }
 
@@ -124,16 +124,7 @@ fn make_transfer_bin(to: Address, amount: U256) -> Vec<u8> {
 fn test_contract_deploy_transfer_query() {
     deploy_hex!("../tests/contracts/C.hex", exe, address);
 
-    println!(
-        "Expected contract address {:?}",
-        H160::from(*CONTRACT_ADDRESS.0),
-    );
-
-    assert_eq!(
-        H160::from(*CONTRACT_ADDRESS.0),
-        address,
-        "Contract address should match"
-    );
+    assert_eq!(*CONTRACT_ADDRESS, address, "Contract address should match");
 
     t_erc20_balance_query(&mut exe, *OWNER, *TOKEN_SUPPLY);
     t_erc20_balance_query(&mut exe, *TO_ADDRESS, U256::ZERO);
@@ -363,8 +354,7 @@ fn test_call_trace() {
     for (fn_sig, expected_bugs, expect_revert) in tests {
         let fn_hex = fn_sig_to_prefix(fn_sig);
         let data = hex::decode(fn_hex).unwrap();
-        let resp =
-            vm.contract_call_helper(Address::new(address.0), *OWNER, data.clone(), UZERO, None);
+        let resp = vm.contract_call_helper(address, *OWNER, data.clone(), UZERO, None);
         assert_eq!(expect_revert, !resp.success);
         let bugs = &vm.bug_data();
         let bugs: Vec<_> = bugs.iter().cloned().collect();
@@ -418,7 +408,9 @@ fn test_deterministic_deploy_overwrite() -> Result<()> {
     setup();
     let contract_deploy_hex = include_str!("../tests/contracts/coverage.hex");
     let contract_deploy_bin = hex::decode(contract_deploy_hex).unwrap();
-    let target_address = Address::from_slice(H160::random().as_bytes());
+    use rand::random;
+    let random_bytes: [u8; 20] = random();
+    let target_address = Address::from_slice(random_bytes.as_slice());
     let force_address = Some(target_address);
     let mut vm = TinyEVM::default();
     let c1 = vm
@@ -496,7 +488,7 @@ fn test_heuristics_inner(
 
     let tx_data = hex::decode(fn_hex).unwrap();
 
-    let resp = exe.contract_call_helper(Address::new(address.0), *OWNER, tx_data, UZERO, None);
+    let resp = exe.contract_call_helper(address, *OWNER, tx_data, UZERO, None);
 
     assert!(
         resp.success,
@@ -589,7 +581,7 @@ fn test_heuristics_signed_int() {
 
     let tx_data = hex::decode(fn_hex).unwrap();
 
-    let resp = exe.contract_call_helper(Address::new(address.0), *OWNER, tx_data, UZERO, None);
+    let resp = exe.contract_call_helper(address, *OWNER, tx_data, UZERO, None);
 
     assert!(resp.success, "Transaction should succeed.");
 
@@ -789,7 +781,7 @@ fn test_set_get_storage() {
     let fn_sig = "val()";
     let fn_sig_hex = fn_sig_to_prefix(fn_sig);
     let bin = hex::decode(fn_sig_hex).unwrap();
-    let resp = exe.contract_call_helper(Address::new(addr.0), owner, bin, UZERO, None);
+    let resp = exe.contract_call_helper(addr, owner, bin, UZERO, None);
 
     assert!(
         resp.success,
@@ -808,7 +800,7 @@ fn test_set_get_storage() {
 #[test]
 fn test_set_get_code() {
     setup();
-    let owner = Address::new(H160::random().0);
+    let owner = Address::new(random::<[u8; 20]>());
     let mut vm = TinyEVM::default();
 
     let bytecode = "6080604052348015600f57600080fd5b506004361060285760003560e01c806306661abd14602d575b600080fd5b60336049565b6040518082815260200191505060405180910390f35b600063075bcd1590509056fea2646970667358221220e78a1be79408618d44865cc7414258752af2f0f5a4a71e57ec8ee4cb78af994164736f6c63430007000033";
@@ -847,7 +839,7 @@ fn test_exp_overflow() {
         vm.exe.as_ref().unwrap().db().accounts
     );
 
-    let resp = vm.contract_call_helper(Address::new(address.0), owner, bin, UZERO, None);
+    let resp = vm.contract_call_helper(address, owner, bin, UZERO, None);
 
     assert!(
         !resp.bug_data.into_iter().any(|b| b.opcode == opcode::EXP),
@@ -857,7 +849,7 @@ fn test_exp_overflow() {
     let bin = format!("{}{:0>64x}", fn_sig_hex, 257);
     let bin = hex::decode(bin).unwrap();
 
-    let resp = vm.contract_call_helper(Address::new(address.0), owner, bin, UZERO, None);
+    let resp = vm.contract_call_helper(address, owner, bin, UZERO, None);
 
     let bugs = &resp.bug_data;
 
@@ -897,7 +889,7 @@ fn test_deadloop() {
     let fn_sig = "run()";
     let bin = fn_sig_to_prefix(fn_sig);
     let bin = hex::decode(bin).unwrap();
-    let resp = vm.contract_call_helper(Address::new(address.0), owner, bin, UZERO, None);
+    let resp = vm.contract_call_helper(address, owner, bin, UZERO, None);
 
     assert!(!resp.success, "Expect deadloop to crash");
     println!("resp: {:?}", resp);
@@ -971,7 +963,7 @@ fn test_tod() {
     vm.clear_instrumentation();
 
     let bin = hex::decode(fn_sig_to_prefix("play_TOD27()")).unwrap();
-    let resp = vm.contract_call_helper(Address::new(addr.0), owner, bin, UZERO, None);
+    let resp = vm.contract_call_helper(addr, owner, bin, UZERO, None);
     assert!(resp.success, "Call should succeed");
     let bugs = vm.bug_data().clone();
 
@@ -993,7 +985,7 @@ fn test_tod() {
     let bin = format!("{}{}", fn_sig_to_prefix("write_a(uint256)"), arg_hex);
     let bin = hex::decode(bin).unwrap();
 
-    let resp = vm.contract_call_helper(Address::new(addr.0), owner, bin, UZERO, None);
+    let resp = vm.contract_call_helper(addr, owner, bin, UZERO, None);
     assert!(resp.success, "Call should succeed");
     let bugs = vm.bug_data().clone();
 
@@ -1020,7 +1012,9 @@ fn test_tod() {
 #[test]
 fn test_get_set_balance() {
     // Test balance set get
-    let from = Address::from_slice(H160::random().as_bytes());
+    use rand::random;
+    let random_bytes: [u8; 20] = random();
+    let from = Address::from_slice(random_bytes.as_slice());
     let owner = from;
 
     let target_balance = U256::from(232321u64);
@@ -1079,7 +1073,7 @@ fn test_selfdestruct_and_create() {
     deploy_hex!("../tests/contracts/self_destruct.hex", vm, addr);
 
     let bin = hex::decode(fn_sig_to_prefix("kill()")).unwrap();
-    let resp = vm.contract_call_helper(Address::new(addr.0), *OWNER, bin, UZERO, None);
+    let resp = vm.contract_call_helper(addr, *OWNER, bin, UZERO, None);
     assert!(resp.success, "Call error {:?}", resp);
 
     let bugs = resp.bug_data;
@@ -1117,7 +1111,7 @@ fn test_seen_pcs() {
     // Call b.add() with some ether
     let bin = hex::decode(fn_sig_to_prefix("add()")).unwrap();
     let resp = vm.contract_call_helper(
-        Address::new(address.0),
+        address,
         *OWNER,
         bin,
         U256::from_str_radix("999999", 16).unwrap(),
@@ -1125,7 +1119,7 @@ fn test_seen_pcs() {
     );
     assert!(resp.success, "Call error {:?}", resp);
 
-    let seen_pcs = &vm.pcs_by_address().get(&Address::new(address.0));
+    let seen_pcs = &vm.pcs_by_address().get(&address);
     assert!(
         seen_pcs.is_some(),
         "Seen PCs should be found for the target contract "
@@ -1140,7 +1134,6 @@ fn test_seen_pcs() {
 fn test_runtime_configuration() {
     setup();
     deploy_hex!("../tests/contracts/contract_creation_B.hex", vm, address);
-    let address = Address::new(address.0);
 
     vm.instrument_config_mut().pcs_by_address = false;
 
@@ -1172,8 +1165,11 @@ fn test_runtime_configuration() {
 fn test_library_method_with_large_string() {
     deploy_hex!("../tests/contracts/VeLogo.hex", vm, address);
     let fn_sig = "tokenURI(uint256,uint256,uint256,uint256)";
-    let fn_args_hex: String = repeat_with(H256::random).take(4).map(hex::encode).collect();
-    let address = Address::new(address.0);
+
+    let fn_args_hex: String = repeat_with(|| random::<[u8; 20]>())
+        .take(4)
+        .map(hex::encode)
+        .collect();
 
     let add_hex = format!("{}{}", fn_sig_to_prefix(fn_sig), fn_args_hex);
     let data = hex::decode(add_hex).unwrap();
@@ -1195,7 +1191,6 @@ fn test_reset_storage() {
         "Setting storage for address: {:?} index: {:?} to value: {:?}",
         addr, index, target_value
     );
-    let addr = Address::new(addr.0);
 
     let r = vm.set_storage_by_address(addr, index, target_value);
 
@@ -1221,7 +1216,6 @@ fn test_reset_storage() {
 fn test_sha3_mapping() {
     setup();
     deploy_hex!("../tests/contracts/sha3_mapping.hex", vm, addr);
-    let addr = Address::new(addr.0);
 
     let prefix = fn_sig_to_prefix("arrLocation(uint256,uint256,uint256)");
     let args = format!(
@@ -1239,9 +1233,11 @@ fn test_sha3_mapping() {
     assert!(resp.success, "Call error {:?}", resp);
     let actual_mapping = resp.heuristics.sha3_mapping;
     println!("sha3_mappings: {:?}", actual_mapping);
-    let expected_hash =
-        H256::from_str("0x036b6384b5eca791c62761152d0c79bb0604c104a5fb6f4eb0703f3154bb3db0")
-            .unwrap();
+    let expected_hash = U256::from_str_radix(
+        "0x036b6384b5eca791c62761152d0c79bb0604c104a5fb6f4eb0703f3154bb3db0",
+        16,
+    )
+    .unwrap();
     let expected_key: Vec<u8> = vec![
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 5,
@@ -1321,7 +1317,6 @@ fn test_seen_addresses() {
 fn test_distance_signed() {
     setup();
     deploy_hex!("../tests/contracts/test_distance_signed.hex", vm, address);
-    let address = Address::new(address.0);
     let fn_sig = "sign_distance(int256)";
     let fn_sig_hex = fn_sig_to_prefix(fn_sig);
     let input = U256::from(5);
@@ -1379,7 +1374,6 @@ fn test_peephole_optimized_if_equal() {
         vm,
         address
     );
-    let address = Address::new(address.0);
 
     let fn_sig = "func1(uint8)";
     let fn_sig_hex = fn_sig_to_prefix(fn_sig);

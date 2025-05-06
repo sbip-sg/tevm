@@ -1,9 +1,11 @@
 use alloy::{
     eips::BlockId,
     hex::FromHex,
-    providers::{Provider, RootProvider},
-    rpc::types::{Block, BlockTransactionsKind},
-    transports::http::{Client, Http},
+    providers::{
+        Identity, Provider, RootProvider,
+        fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller},
+    },
+    rpc::types::Block,
 };
 
 use eyre::Result;
@@ -14,7 +16,14 @@ use tracing::debug;
 
 use crate::cache::ProviderCache;
 
-pub type AlloyHttpProvider = RootProvider<Http<Client>>;
+// pub type AlloyHttpProvider = RootProvider<Http<Client>>;
+pub type AlloyHttpProvider = FillProvider<
+    JoinFill<
+        Identity,
+        JoinFill<GasFiller, JoinFill<BlobGasFiller, JoinFill<NonceFiller, ChainIdFiller>>>,
+    >,
+    RootProvider,
+>;
 
 #[derive(Debug)]
 pub struct ForkProvider<T: ProviderCache> {
@@ -161,11 +170,8 @@ impl<T: ProviderCache> ForkProvider<T> {
             return Ok(Some(serde_json::from_str(&cached).unwrap()));
         }
 
-        let block = self.block_on(async {
-            self.provider
-                .get_block(BlockId::from(block_number), BlockTransactionsKind::Hashes)
-                .await
-        })?;
+        let block =
+            self.block_on(async { self.provider.get_block(BlockId::from(block_number)).await })?;
 
         let _ = self.cache.store(
             "eth",

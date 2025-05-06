@@ -1,17 +1,17 @@
 use crate::{fork_provider::ForkProvider, response::RevmResult};
 use ::revm::{
+    Evm,
     db::DbAccount,
     primitives::{
-        keccak256, AccountInfo, Address, Bytecode, CfgEnv, Env, ExecutionResult, HaltReason,
-        TransactTo,
+        AccountInfo, Address, Bytecode, CfgEnv, Env, ExecutionResult, HaltReason, TransactTo,
+        keccak256,
     },
-    Evm,
 };
 use alloy::{providers::ProviderBuilder, transports::http::reqwest::Url};
 use cache::DefaultProviderCache;
 use chain_inspector::ChainInspector;
 use dotenv::dotenv;
-use eyre::{eyre, ContextCompat, Result};
+use eyre::{ContextCompat, Result, eyre};
 use fork_db::ForkDB;
 use hashbrown::{HashMap, HashSet};
 use lazy_static::lazy_static;
@@ -19,9 +19,8 @@ use num_bigint::BigInt;
 use pyo3::prelude::*;
 use response::{Response, SeenPcsMap, WrappedBug, WrappedHeuristics, WrappedMissedBranch};
 use revm::{
-    inspector_handle_register,
-    primitives::{TxEnv, B256},
-    Database,
+    Database, inspector_handle_register,
+    primitives::{B256, TxEnv},
 };
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
@@ -45,7 +44,7 @@ pub mod response;
 pub use common::*;
 use hex::ToHex;
 use instrument::{
-    bug_inspector::BugInspector, log_inspector::LogInspector, BugData, Heuristics, InstrumentConfig,
+    BugData, Heuristics, InstrumentConfig, bug_inspector::BugInspector, log_inspector::LogInspector,
 };
 use ruint::aliases::U256;
 use std::{cell::Cell, mem::replace, str::FromStr};
@@ -106,7 +105,7 @@ static mut TRACE_ENABLED: bool = false;
 /// Enable printing of trace logs for debugging
 #[pyfunction]
 pub fn enable_tracing() -> Result<()> {
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt};
 
     if unsafe { !TRACE_ENABLED } {
         let subscriber = fmt::Subscriber::builder()
@@ -562,14 +561,14 @@ impl TinyEVM {
 
         if fork_enabled {
             let block = db.get_fork_block().unwrap();
-            let block_number = block.header.number.expect("Failed to get block number");
+            let block_number = block.header.number;
             info!("Using block number: {:?}", block_number);
 
             env.block.number = U256::from(block_number);
             env.block.timestamp = U256::from(block.header.timestamp);
             env.block.difficulty = block.header.difficulty;
             env.block.gas_limit = U256::from(block.header.gas_limit);
-            env.block.coinbase = block.header.miner;
+            env.block.coinbase = block.header.beneficiary;
             env.cfg.disable_base_fee = true;
             if let Some(base_fee) = block.header.base_fee_per_gas {
                 env.block.basefee = U256::from(base_fee);

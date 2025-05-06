@@ -1,14 +1,14 @@
+use crate::CALL_DEPTH;
 use crate::cache::{DefaultProviderCache, ProviderCache};
 use crate::fork_provider::ForkProvider;
-use crate::CALL_DEPTH;
 use alloy::rpc::types::Block;
 use eyre::{ContextCompat, Result};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
 use revm::db::{AccountState, DbAccount};
 use revm::primitives::{
-    keccak256, Account, AccountInfo, Address, Bytecode, HashMap as RevmHashMap, B256, KECCAK_EMPTY,
-    U256,
+    Account, AccountInfo, Address, B256, Bytecode, HashMap as RevmHashMap, KECCAK_EMPTY, U256,
+    keccak256,
 };
 use revm::{Database, DatabaseCommit};
 use std::env;
@@ -22,7 +22,7 @@ pub struct ForkDB<T: ProviderCache> {
     /// Tracks all contracts by their code hash.
     pub contracts: HashMap<B256, Bytecode>,
     /// All cached block hashes
-    pub block_hashes: HashMap<U256, B256>,
+    pub block_hashes: HashMap<u64, B256>,
 
     pub fork_enabled: bool,
     /// Web3 provider
@@ -284,27 +284,19 @@ impl<T: ProviderCache> Database for ForkDB<T> {
 
     /// Get block hash by block number. Note if fork is not enabled, the block hash
     /// is calculated from the block number
-    fn block_hash(&mut self, number: U256) -> Result<B256, Self::Error> {
-        let unumber = number;
+    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
         if let Entry::Occupied(entry) = self.block_hashes.entry(number) {
             return Ok(*entry.get());
         }
 
         if !self.fork_enabled {
-            return Ok(keccak256(number.to_be_bytes::<{ U256::BYTES }>()));
+            return Ok(keccak256(number.to_be_bytes()));
         }
-
-        // saturate usize
-        if number > U256::from(u64::MAX) {
-            return Ok(KECCAK_EMPTY);
-        }
-        let number = u64::try_from(number).unwrap();
 
         let block = self.get_fork_block_by_number(number)?;
 
-        let hash = block.header.hash.unwrap().0;
-        let hash = B256::from_slice(&hash);
-        self.block_hashes.insert(unumber, hash);
+        let hash = block.header.hash;
+        self.block_hashes.insert(number, hash);
         Ok(hash)
     }
 }
@@ -341,8 +333,7 @@ impl<T: ProviderCache> DatabaseCommit for ForkDB<T> {
 
             trace!(
                 "Replacing storage for address {:?} <== {:?}",
-                address,
-                account.storage
+                address, account.storage
             );
 
             db_account.storage.extend(

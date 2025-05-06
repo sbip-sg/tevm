@@ -1,9 +1,9 @@
 use crate::CALL_DEPTH;
 use lazy_static::lazy_static;
 use revm::{
-    interpreter::{CallInputs, CallOutcome, CallScheme, CallValue, InstructionResult},
-    primitives::{Address, Bytes, Log as EvmLog, B256, U256},
     Database, EvmContext, Inspector,
+    interpreter::{CallInputs, CallOutcome, CallScheme, CallValue, InstructionResult, Interpreter},
+    primitives::{Address, B256, Bytes, Log as EvmLog, U256},
 };
 use std::cell::Cell;
 use thread_local::ThreadLocal;
@@ -50,7 +50,7 @@ where
     DB: Database,
 {
     #[inline]
-    fn log(&mut self, _context: &mut EvmContext<DB>, evm_log: &EvmLog) {
+    fn log(&mut self, _interp: &mut Interpreter, _context: &mut EvmContext<DB>, evm_log: &EvmLog) {
         if !self.trace_enabled {
             return;
         }
