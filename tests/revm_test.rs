@@ -1166,7 +1166,7 @@ fn test_library_method_with_large_string() {
     deploy_hex!("../tests/contracts/VeLogo.hex", vm, address);
     let fn_sig = "tokenURI(uint256,uint256,uint256,uint256)";
 
-    let fn_args_hex: String = repeat_with(|| random::<[u8; 20]>())
+    let fn_args_hex: String = repeat_with(random::<[u8; 20]>)
         .take(4)
         .map(hex::encode)
         .collect();

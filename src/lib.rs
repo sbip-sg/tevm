@@ -411,7 +411,7 @@ impl TinyEVM {
 
         let db = &self.db();
         let ignored_addresses = db.ignored_addresses.clone();
-        let ignored_addresses = ignored_addresses.into_iter().map(Into::into).collect();
+        let ignored_addresses = ignored_addresses.into_iter().collect();
 
         let log_inspector = self.log_inspector();
         let logs = log_inspector.logs.clone();

@@ -61,7 +61,7 @@ fn bench_call_function_returning_large_string_no_instrumentation(c: &mut Criteri
 
             let fn_sig = "tokenURI(uint256,uint256,uint256,uint256)";
             b.iter(|| {
-                let fn_args_hex: String = repeat_with(|| random::<[u8; 32]>())
+                let fn_args_hex: String = repeat_with(random::<[u8; 32]>)
                     .take(4)
                     .map(hex::encode)
                     .collect();
