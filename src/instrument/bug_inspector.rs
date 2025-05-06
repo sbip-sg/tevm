@@ -1,5 +1,4 @@
 use hashbrown::{HashMap, HashSet};
-use primitive_types::{H160, H256};
 use revm::{
     interpreter::{CreateInputs, CreateOutcome, Interpreter, OpCode},
     primitives::{Address, U256},
@@ -412,7 +411,7 @@ where
 
                 if let (Some(in_len), Some(callee)) = (in_len, address) {
                     let callee_bytes: [u8; 32] = callee.to_be_bytes();
-                    let callee = H160::from_slice(&callee_bytes[12..]);
+                    let callee = Address::from_slice(&callee_bytes[12..]);
                     let in_len = usize::try_from(in_len).unwrap();
                     let bug = Bug::new(
                         BugType::Call(in_len, callee),
@@ -523,7 +522,7 @@ where
                                 input
                             }
                         };
-                        let output = H256::from_slice(&output.to_be_bytes::<32>());
+
                         self.heuristics.record_sha3_mapping(last_32, output);
                     }
                 }

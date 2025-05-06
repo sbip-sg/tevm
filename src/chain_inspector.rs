@@ -1,6 +1,6 @@
 use revm::interpreter::{CallInputs, CallOutcome, CreateInputs, CreateOutcome};
 use revm::primitives::Log;
-use revm::{interpreter::Interpreter, Database, EvmContext, Inspector};
+use revm::{Database, EvmContext, Inspector, interpreter::Interpreter};
 
 use crate::instrument::bug_inspector::BugInspector;
 use crate::instrument::log_inspector::LogInspector;
@@ -33,12 +33,12 @@ impl<DB: Database> Inspector<DB> for ChainInspector {
     }
 
     #[inline]
-    fn log(&mut self, context: &mut EvmContext<DB>, log: &Log) {
+    fn log(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>, log: &Log) {
         if let Some(ins) = self.log_inspector.as_mut() {
-            ins.log(context, log);
+            ins.log(interp, context, log);
         }
         if let Some(ins) = self.bug_inspector.as_mut() {
-            ins.log(context, log);
+            ins.log(interp, context, log);
         }
     }
 

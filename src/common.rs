@@ -4,7 +4,6 @@ use std::cmp::Ordering;
 use eyre::Result;
 use hex::ToHex;
 use num_bigint::BigInt;
-use primitive_types::H256;
 use revm::interpreter::instructions::i256::i256_cmp;
 use ruint::aliases::U256;
 use sha3::{Digest, Keccak256};
@@ -14,8 +13,6 @@ pub const MAX_BLOCK_GAS: u64 = 1_000_000_000_000_000;
 /// U256 zero
 pub const UZERO: U256 = U256::ZERO;
 
-/// H256 zero
-pub const HZERO: H256 = H256::zero();
 /// Gas limit for one transaction
 pub const TX_GAS_LIMIT: u64 = 30_000_000;
 

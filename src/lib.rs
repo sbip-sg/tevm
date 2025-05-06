@@ -1,17 +1,17 @@
 use crate::{fork_provider::ForkProvider, response::RevmResult};
 use ::revm::{
+    Evm,
     db::DbAccount,
     primitives::{
-        keccak256, AccountInfo, Address, Bytecode, CfgEnv, Env, ExecutionResult, HaltReason,
-        TransactTo,
+        AccountInfo, Address, Bytecode, CfgEnv, Env, ExecutionResult, HaltReason, TransactTo,
+        keccak256,
     },
-    Evm,
 };
+use alloy::{providers::ProviderBuilder, transports::http::reqwest::Url};
 use cache::DefaultProviderCache;
 use chain_inspector::ChainInspector;
 use dotenv::dotenv;
-use ethers_providers::{Http, Provider};
-use eyre::{eyre, ContextCompat, Result};
+use eyre::{ContextCompat, Result, eyre};
 use fork_db::ForkDB;
 use hashbrown::{HashMap, HashSet};
 use lazy_static::lazy_static;
@@ -19,9 +19,8 @@ use num_bigint::BigInt;
 use pyo3::prelude::*;
 use response::{Response, SeenPcsMap, WrappedBug, WrappedHeuristics, WrappedMissedBranch};
 use revm::{
-    inspector_handle_register,
-    primitives::{TxEnv, B256},
-    Database,
+    Database, inspector_handle_register,
+    primitives::{B256, TxEnv},
 };
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
@@ -45,7 +44,7 @@ pub mod response;
 pub use common::*;
 use hex::ToHex;
 use instrument::{
-    bug_inspector::BugInspector, log_inspector::LogInspector, BugData, Heuristics, InstrumentConfig,
+    BugData, Heuristics, InstrumentConfig, bug_inspector::BugInspector, log_inspector::LogInspector,
 };
 use ruint::aliases::U256;
 use std::{cell::Cell, mem::replace, str::FromStr};
@@ -106,7 +105,7 @@ static mut TRACE_ENABLED: bool = false;
 /// Enable printing of trace logs for debugging
 #[pyfunction]
 pub fn enable_tracing() -> Result<()> {
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt};
 
     if unsafe { !TRACE_ENABLED } {
         let subscriber = fmt::Subscriber::builder()
@@ -412,7 +411,7 @@ impl TinyEVM {
 
         let db = &self.db();
         let ignored_addresses = db.ignored_addresses.clone();
-        let ignored_addresses = ignored_addresses.into_iter().map(Into::into).collect();
+        let ignored_addresses = ignored_addresses.into_iter().collect();
 
         let log_inspector = self.log_inspector();
         let logs = log_inspector.logs.clone();
@@ -548,7 +547,7 @@ impl TinyEVM {
             Some(ref url) => {
                 info!("Starting EVM from fork {} and block: {:?}", url, block_id);
                 let runtime = Runtime::new().expect("Create runtime failed");
-                let provider = Provider::<Http>::try_from(url)?;
+                let provider = ProviderBuilder::new().on_http(Url::parse(url)?);
                 let provider = ForkProvider::new(provider, runtime);
                 ForkDB::create_with_provider(Some(provider), block_id)
             }
@@ -562,19 +561,17 @@ impl TinyEVM {
 
         if fork_enabled {
             let block = db.get_fork_block().unwrap();
-            let block_number = block.number.expect("Failed to get block number").as_u64();
+            let block_number = block.header.number;
             info!("Using block number: {:?}", block_number);
 
             env.block.number = U256::from(block_number);
-            env.block.timestamp = U256::from_limbs(block.timestamp.0);
-            env.block.difficulty = U256::from_limbs(block.difficulty.0);
-            env.block.gas_limit = U256::from_limbs(block.gas_limit.0);
+            env.block.timestamp = U256::from(block.header.timestamp);
+            env.block.difficulty = block.header.difficulty;
+            env.block.gas_limit = U256::from(block.header.gas_limit);
+            env.block.coinbase = block.header.beneficiary;
             env.cfg.disable_base_fee = true;
-            if let Some(base_fee) = block.base_fee_per_gas {
-                env.block.basefee = U256::from_limbs(base_fee.0);
-            }
-            if let Some(coinbase) = block.author {
-                env.block.coinbase = Address::from(coinbase.0);
+            if let Some(base_fee) = block.header.base_fee_per_gas {
+                env.block.basefee = U256::from(base_fee);
             }
         }
 
@@ -704,7 +701,7 @@ impl TinyEVM {
     /// - `data`: (Optional, default empty) Constructor arguments encoded as hex string.
     /// - `value`: (Optional, default 0) a U256. Set the value to be included in the contract creation transaction.
     /// - `deploy_to_address`: when provided, change the address of the deployed contract to this address, otherwise deploy to a an address created using `owner.CREATE2(a_fixed_salt, codehash)`.
-
+    ///
     ///   - This requires the constructor to be payable.
     ///   - The transaction sender (owner) must have enough balance
     /// - `init_value`: (Optional) BigInt. Override the initial balance of the contract to this value.

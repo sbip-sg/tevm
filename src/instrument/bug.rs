@@ -1,4 +1,3 @@
-use primitive_types::{H160, H256};
 use revm::primitives::Address;
 use ruint::aliases::U256;
 use std::collections::{HashMap, VecDeque};
@@ -18,7 +17,7 @@ pub enum BugType {
     BlockValueDependency,
     TxOriginDependency,
     /// Call(input_parameter_size, destination_address)
-    Call(usize, H160),
+    Call(usize, Address),
     RevertOrInvalid,
     /// Jumpi(dest)
     Jumpi(usize),
@@ -126,7 +125,7 @@ pub struct Heuristics {
     /// Missed branches
     pub missed_branches: Vec<MissedBranch>,
     /// Mapping from SHA3 output to input. This is for reverse lookup of slot mapping
-    pub sha3_mapping: HashMap<H256, Vec<u8>>,
+    pub sha3_mapping: HashMap<U256, Vec<u8>>,
     // Addresses the transaction was executed on
     pub seen_addresses: Vec<Address>,
 }
@@ -159,7 +158,7 @@ impl Heuristics {
     }
 
     /// Record Sha3 mapping
-    pub fn record_sha3_mapping(&mut self, input: &[u8], output: H256) {
+    pub fn record_sha3_mapping(&mut self, input: &[u8], output: U256) {
         self.sha3_mapping.insert(output, input.to_vec());
     }
 

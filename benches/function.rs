@@ -1,9 +1,9 @@
 use std::{iter::repeat_with, time::Duration};
 
-use criterion::{criterion_group, criterion_main, Criterion};
-use primitive_types::H256;
+use criterion::{Criterion, criterion_group, criterion_main};
+use rand::random;
 use revm::primitives::Address;
-use tinyevm::{fn_sig_to_prefix, TinyEVM, UZERO};
+use tinyevm::{TinyEVM, UZERO, fn_sig_to_prefix};
 
 const OWNER: Address = Address::repeat_byte(0x01);
 const DEPLOY_TO_ADDRESS: Address = Address::repeat_byte(0x02);
@@ -25,7 +25,10 @@ fn bench_call_function_returning_large_string(c: &mut Criterion) {
 
         let fn_sig = "tokenURI(uint256,uint256,uint256,uint256)";
         b.iter(|| {
-            let fn_args_hex: String = repeat_with(H256::random).take(4).map(hex::encode).collect();
+            let fn_args_hex: String = repeat_with(random::<[u8; 32]>)
+                .take(4)
+                .map(hex::encode)
+                .collect();
 
             let add_hex = format!("{}{}", fn_sig_to_prefix(fn_sig), fn_args_hex);
 
@@ -58,8 +61,10 @@ fn bench_call_function_returning_large_string_no_instrumentation(c: &mut Criteri
 
             let fn_sig = "tokenURI(uint256,uint256,uint256,uint256)";
             b.iter(|| {
-                let fn_args_hex: String =
-                    repeat_with(H256::random).take(4).map(hex::encode).collect();
+                let fn_args_hex: String = repeat_with(random::<[u8; 32]>)
+                    .take(4)
+                    .map(hex::encode)
+                    .collect();
 
                 let add_hex = format!("{}{}", fn_sig_to_prefix(fn_sig), fn_args_hex);
 

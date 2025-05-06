@@ -1,7 +1,6 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use primitive_types::U256;
-use revm::primitives::Address;
-use tinyevm::{fn_sig_to_prefix, TinyEVM, UZERO};
+use criterion::{Criterion, criterion_group, criterion_main};
+use revm::primitives::{Address, U256};
+use tinyevm::{TinyEVM, UZERO, fn_sig_to_prefix};
 
 const OWNER: Address = Address::repeat_byte(0x01);
 const DEPLOY_TO_ADDRESS: Address = Address::repeat_byte(0x02);

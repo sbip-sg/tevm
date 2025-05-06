@@ -2,7 +2,7 @@ use eyre::Result;
 use hashbrown::{HashMap, HashSet};
 use hex::ToHex;
 use num_bigint::BigInt;
-use pyo3::{exceptions::PyValueError, prelude::*};
+use pyo3::{exceptions::PyValueError, prelude::*, types::PyString};
 use revm::primitives::{Address, ExecutionResult, Output};
 use ruint::aliases::U256;
 use std::{
@@ -20,7 +20,6 @@ use crate::{
     },
     ruint_u256_to_bigint, trim_prefix,
 };
-use primitive_types::H160;
 
 /// Response from REVM executor
 pub struct RevmResult {
@@ -92,9 +91,9 @@ impl Display for WrappedHeuristics {
 
 #[pymethods]
 impl WrappedHeuristics {
-    /// Get the string respresentation
-    fn __str__(&self) -> String {
-        format!("{:?}", self)
+    /// Get the string representation
+    fn __str__(&self, py: Python<'_>) -> Py<PyString> {
+        PyString::new(py, &format!("{:?}", self)).into()
     }
 }
 
@@ -427,7 +426,13 @@ impl Display for Response {
         write!(
             f,
             "success: {}, exit_reason: {}, data: {:?}, gas_usage: {}, bugs: {:?}, heuristics: {:?}, seen_pcs: {:?}",
-            self.success, self.exit_reason, self.data, self.gas_usage, self.bug_data, self.heuristics, self.seen_pcs
+            self.success,
+            self.exit_reason,
+            self.data,
+            self.gas_usage,
+            self.bug_data,
+            self.heuristics,
+            self.seen_pcs
         )
     }
 }
@@ -448,8 +453,8 @@ impl SeenPcsMap {
     }
 }
 
-impl From<HashMap<H160, HashSet<usize>>> for SeenPcsMap {
-    fn from(seen_pcs: HashMap<H160, HashSet<usize>>) -> Self {
+impl From<HashMap<Address, HashSet<usize>>> for SeenPcsMap {
+    fn from(seen_pcs: HashMap<Address, HashSet<usize>>) -> Self {
         let mut map = HashMap::new();
         for (addr, pcs) in seen_pcs {
             map.insert(format!("0x{}", addr.encode_hex::<String>()), pcs);

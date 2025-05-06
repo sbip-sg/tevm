@@ -1,15 +1,14 @@
+use crate::CALL_DEPTH;
 use crate::cache::{DefaultProviderCache, ProviderCache};
 use crate::fork_provider::ForkProvider;
-use crate::CALL_DEPTH;
-use ethers::types::{Block, TxHash};
+use alloy::rpc::types::Block;
 use eyre::{ContextCompat, Result};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
-use primitive_types::H256;
 use revm::db::{AccountState, DbAccount};
 use revm::primitives::{
-    keccak256, Account, AccountInfo, Address, Bytecode, HashMap as RevmHashMap, B256, KECCAK_EMPTY,
-    U256,
+    Account, AccountInfo, Address, B256, Bytecode, HashMap as RevmHashMap, KECCAK_EMPTY, U256,
+    keccak256,
 };
 use revm::{Database, DatabaseCommit};
 use std::env;
@@ -23,7 +22,7 @@ pub struct ForkDB<T: ProviderCache> {
     /// Tracks all contracts by their code hash.
     pub contracts: HashMap<B256, Bytecode>,
     /// All cached block hashes
-    pub block_hashes: HashMap<U256, B256>,
+    pub block_hashes: HashMap<u64, B256>,
 
     pub fork_enabled: bool,
     /// Web3 provider
@@ -35,7 +34,7 @@ pub struct ForkDB<T: ProviderCache> {
     /// Addresses ignored by depth limit
     pub ignored_addresses: HashSet<Address>,
     /// Block caches
-    block_cache: HashMap<u64, Block<TxHash>>,
+    block_cache: HashMap<u64, Block>,
     /// Max depth to consider when forking address
     max_fork_depth: usize,
 }
@@ -77,7 +76,7 @@ impl<T: ProviderCache> ForkDB<T> {
         }
     }
 
-    fn get_fork_block_by_number(&mut self, number: u64) -> Result<Block<TxHash>> {
+    fn get_fork_block_by_number(&mut self, number: u64) -> Result<Block> {
         if let Some(block) = self.block_cache.get(&number) {
             return Ok(block.clone());
         }
@@ -94,7 +93,7 @@ impl<T: ProviderCache> ForkDB<T> {
     }
 
     /// Get forked block
-    pub fn get_fork_block(&mut self) -> Result<Block<TxHash>> {
+    pub fn get_fork_block(&mut self) -> Result<Block> {
         let number = self.get_fork_block_id()?;
         self.get_fork_block_by_number(number)
     }
@@ -222,11 +221,11 @@ impl<T: ProviderCache> Database for ForkDB<T> {
 
         // An exist remotely if there is something in the remote address
         // Assuming an account can't have storage without code
-        let is_remote = !code.0.is_empty() || !balance.is_zero() || !nonce.is_zero();
+        let is_remote = !code.0.is_empty() || !balance.is_zero() || nonce != 0;
 
         let info = AccountInfo::new(
-            U256::from_limbs(balance.0),
-            nonce.as_u64(),
+            balance,
+            nonce,
             keccak256(&code),
             Bytecode::new_raw(code.0.into()),
         );
@@ -247,7 +246,6 @@ impl<T: ProviderCache> Database for ForkDB<T> {
     fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
         let add = Address::from(address.0);
         let uindex = index;
-        let index = H256::from(index.to_be_bytes());
         trace!("retrieve storage {} {}", address, index);
 
         let _ = self.basic(address)?;
@@ -265,8 +263,6 @@ impl<T: ProviderCache> Database for ForkDB<T> {
 
         let provider = self.provider.as_mut().unwrap();
         let value = provider.get_storage_at(&add, &index, self.block_id)?;
-
-        let value = U256::from_be_bytes(value.to_fixed_bytes());
 
         debug!(
             "Using storage: {:?} index {:?} value {:?} ",
@@ -288,27 +284,20 @@ impl<T: ProviderCache> Database for ForkDB<T> {
 
     /// Get block hash by block number. Note if fork is not enabled, the block hash
     /// is calculated from the block number
-    fn block_hash(&mut self, number: U256) -> Result<B256, Self::Error> {
-        let unumber = number;
+    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
         if let Entry::Occupied(entry) = self.block_hashes.entry(number) {
             return Ok(*entry.get());
         }
 
         if !self.fork_enabled {
-            return Ok(keccak256(number.to_be_bytes::<{ U256::BYTES }>()));
+            let bytes: [u8; 32] = U256::from(number).to_be_bytes();
+            return Ok(keccak256(bytes));
         }
-
-        // saturate usize
-        if number > U256::from(u64::MAX) {
-            return Ok(KECCAK_EMPTY);
-        }
-        let number = u64::try_from(number).unwrap();
 
         let block = self.get_fork_block_by_number(number)?;
 
-        let hash = block.hash.unwrap().0;
-        let hash = B256::from_slice(&hash);
-        self.block_hashes.insert(unumber, hash);
+        let hash = block.header.hash;
+        self.block_hashes.insert(number, hash);
         Ok(hash)
     }
 }
@@ -345,8 +334,7 @@ impl<T: ProviderCache> DatabaseCommit for ForkDB<T> {
 
             trace!(
                 "Replacing storage for address {:?} <== {:?}",
-                address,
-                account.storage
+                address, account.storage
             );
 
             db_account.storage.extend(
