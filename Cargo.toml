@@ -9,6 +9,9 @@ crate-type = ["cdylib", "rlib"]
 path="src/lib.rs"
 
 [dependencies]
+openssl = "0.10.72"
+ring = "0.17.12"
+
 eyre = { version = "0.6.12" }
 hex = "0.4.3"
 lazy_static = "1.5.0"
@@ -41,7 +44,7 @@ hex-literal = "0.4.1"
 hashbrown = { version = "0.15.3", features = ["serde"] }
 
 [dev-dependencies]
-criterion = {version="0.3.6", features=["html_reports"] }
+criterion = {version="0.5", features=["html_reports"] }
 rand = "0.9.1"
 
 [features]
