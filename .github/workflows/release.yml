@@ -16,7 +16,7 @@ jobs:
   release:
     name: Build and publish binaries
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
 
@@ -40,9 +40,9 @@ jobs:
         key: ${{ runner.os }}-${{steps.os.outputs.KERNEL}}-${{ hashFiles('**/Cargo.toml') }}
 
 
-    - uses: actions/setup-python@v4
+    - uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.12'
         cache: 'pip'
 
     - name: Install Python dependencies
@@ -50,7 +50,8 @@ jobs:
 
     - name: Build with file system cache
       run: |
-        maturin build --release -i 3.9 -o _fs
+        maturin build --release -i ${{ env.pythonLocation }}/bin/python -o _fs
+
 
     - name: Make _out directory
       run: |
@@ -65,7 +66,7 @@ jobs:
 
     - name: Build with redis cache
       run: |
-        maturin build --release -i 3.9 --cargo-extra-args="--features redis" -o _redis
+        maturin build --release -i ${{ env.pythonLocation }}/bin/python --cargo-extra-args="--features redis" -o _redis
 
     - name: Rename .whl files
       run: |
