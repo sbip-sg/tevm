@@ -931,10 +931,7 @@ fn test_blockhash() {
         let previous_blockhash = {
             let bin = hex::decode(fn_sig_to_prefix("lh()")).unwrap();
             let resp = vm.contract_call_helper(addr, owner, bin, UZERO, None);
-            format!(
-                "{:x}",
-                U256::from_be_bytes::<32>(resp.data.try_into().unwrap())
-            )
+            hex::encode(resp.data)
         };
 
         let current_block = {
@@ -1166,7 +1163,7 @@ fn test_library_method_with_large_string() {
     deploy_hex!("../tests/contracts/VeLogo.hex", vm, address);
     let fn_sig = "tokenURI(uint256,uint256,uint256,uint256)";
 
-    let fn_args_hex: String = repeat_with(random::<[u8; 20]>)
+    let fn_args_hex: String = repeat_with(random::<[u8; 32]>)
         .take(4)
         .map(hex::encode)
         .collect();
@@ -1234,7 +1231,7 @@ fn test_sha3_mapping() {
     let actual_mapping = resp.heuristics.sha3_mapping;
     println!("sha3_mappings: {:?}", actual_mapping);
     let expected_hash = U256::from_str_radix(
-        "0x036b6384b5eca791c62761152d0c79bb0604c104a5fb6f4eb0703f3154bb3db0",
+        "036b6384b5eca791c62761152d0c79bb0604c104a5fb6f4eb0703f3154bb3db0",
         16,
     )
     .unwrap();
@@ -1408,14 +1405,18 @@ fn test_peephole_optimized_if_equal() {
 }
 
 #[test]
-fn test_fork() -> Result<()> {
+fn test_fork_ethereum() -> Result<()> {
     setup();
     if env::var("TINYEVM_CI_TESTS").is_ok() {
         warn!("Skipping tests on CI");
         return Ok(());
     }
 
-    let fork_url = Some("https://eth.llamarpc.com".into());
+    let fork_url = env::var("ETH_RPC_URL").ok();
+    if fork_url.is_none() {
+        warn!("Please configure ETH_RPC_URL to run Ethereum fork test. Skipping test_fork.");
+        return Ok(());
+    }
     let block_id = Some(17869485);
 
     let mut evm = TinyEVM::new(fork_url, block_id)?;
@@ -1449,7 +1450,13 @@ fn test_call_forked_contract_from_local_contract() -> Result<()> {
     }
 
     let bin = include_str!("../tests/contracts/test_fork.hex");
-    let fork_url = Some("https://bscrpc.com".into());
+    let fork_url = env::var("BSC_RPC_URL").ok();
+    if fork_url.is_none() {
+        warn!(
+            "Please configure BSC_RPC_URL to run Binance chain fork test. Skipping test_call_forked_contract_from_local_contract."
+        );
+        return Ok(());
+    }
     let block_id = Some(0x1e08bd6);
 
     let mut evm = TinyEVM::new(fork_url, block_id)?;
@@ -1526,7 +1533,12 @@ fn test_sturdy_hack() -> Result<()> {
     }
 
     let bin = include_str!("../tests/contracts/SturdyFinance_ReadonlyRE.hex");
-    let fork_url = Some("https://eth.llamarpc.com".into());
+    let fork_url = env::var("ETH_RPC_URL").ok();
+    if fork_url.is_none() {
+        warn!("Please configure ETH_RPC_URL to run Ethereum fork test. Skipping test_sturdy_hack.");
+        return Ok(());
+    }
+
     let block_id = Some(17_460_609);
 
     let mut evm = TinyEVM::new(fork_url, block_id)?;

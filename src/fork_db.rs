@@ -290,7 +290,8 @@ impl<T: ProviderCache> Database for ForkDB<T> {
         }
 
         if !self.fork_enabled {
-            return Ok(keccak256(number.to_be_bytes()));
+            let bytes: [u8; 32] = U256::from(number).to_be_bytes();
+            return Ok(keccak256(bytes));
         }
 
         let block = self.get_fork_block_by_number(number)?;

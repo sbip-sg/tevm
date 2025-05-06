@@ -13,6 +13,11 @@ git clone git@github.com:sbip-sg/tevm.git
 
 * Run test in tinyevm
 
+> ℹ️ Tests using forked DB is not enabled by default. Set the environment variables to enable testing with forked DB:
+>
+> - ETH_RPC_URL - URL to an Ethereum node HTTP RPC endpoint
+> - BSC_RPC_URL - URL to a BSC node HTTP RPC endpoint
+
 - For unit tests, run
 
 ``` bash
@@ -24,6 +29,7 @@ make test
 ``` bash
 make bench
 ```
+
 
 
 ## How to test the underline REVM

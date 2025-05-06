@@ -10,7 +10,7 @@ pub struct RedisProviderCache {
 
 impl Default for RedisProviderCache {
     fn default() -> Self {
-        let node = env::var("TINYEVM_REDIS_NODE").expect("Redis node is required");
+        let node = env::var("TINYEVM_REDIS_NODE").expect("Please configure TINYEVM_REDIS_NODE");
         RedisProviderCache::new(&node).unwrap()
     }
 }
@@ -40,7 +40,7 @@ impl ProviderCache for RedisProviderCache {
     fn get(&self, chain: &str, block: u64, api: &str, request_hash: &str) -> Result<String> {
         let key = format!("{}_{}_{}_{}_{}", "tinyevm", chain, block, api, request_hash);
         let mut conn = self.client.get_connection()?;
-        let val = conn.get(key)?;
+        let val = conn.get(&key)?;
         Ok(val)
     }
 }
