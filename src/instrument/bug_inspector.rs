@@ -1,9 +1,11 @@
 use hashbrown::{HashMap, HashSet};
 use revm::{
-    interpreter::{CreateInputs, CreateOutcome, Interpreter, OpCode},
+    interpreter::{CreateInputs, CreateOutcome, Interpreter},
     primitives::{Address, U256},
-    Database, EvmContext, Inspector,
+    Database, Inspector,
 };
+use revm::context::Context as EvmContext;
+use revm::bytecode::opcode::OpCode;
 use tracing::{debug, warn};
 
 use crate::i256_diff;

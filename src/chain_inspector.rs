@@ -1,6 +1,6 @@
 use revm::interpreter::{CallInputs, CallOutcome, CreateInputs, CreateOutcome};
 use revm::primitives::Log;
-use revm::{Database, EvmContext, Inspector, interpreter::Interpreter};
+use revm::{Database, context::Context as EvmContext, Inspector, interpreter::Interpreter};
 
 use crate::instrument::bug_inspector::BugInspector;
 use crate::instrument::log_inspector::LogInspector;
@@ -12,33 +12,33 @@ pub struct ChainInspector {
 }
 
 impl<DB: Database> Inspector<DB> for ChainInspector {
-    #[inline]
-    fn step(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
+    #[inline] 
+    fn step(&mut self, interp: &mut Interpreter, db: &mut DB) {
         if let Some(ins) = self.log_inspector.as_mut() {
-            ins.step(interp, context);
+            ins.step(interp, db);
         }
         if let Some(ins) = self.bug_inspector.as_mut() {
-            ins.step(interp, context);
+            ins.step(interp, db);
         }
     }
 
     #[inline]
-    fn step_end(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
+    fn step_end(&mut self, interp: &mut Interpreter, db: &mut DB) {
         if let Some(ins) = self.log_inspector.as_mut() {
-            ins.step_end(interp, context);
+            ins.step_end(interp, db);
         }
         if let Some(ins) = self.bug_inspector.as_mut() {
-            ins.step_end(interp, context);
+            ins.step_end(interp, db);
         }
     }
 
     #[inline]
-    fn log(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>, log: &Log) {
+    fn log(&mut self, interp: &mut Interpreter, db: &mut DB, log: Log) {
         if let Some(ins) = self.log_inspector.as_mut() {
-            ins.log(interp, context, log);
+            ins.log(interp, db, log.clone());
         }
         if let Some(ins) = self.bug_inspector.as_mut() {
-            ins.log(interp, context, log);
+            ins.log(interp, db, log);
         }
     }
 
@@ -47,14 +47,14 @@ impl<DB: Database> Inspector<DB> for ChainInspector {
     #[inline]
     fn call(
         &mut self,
-        context: &mut EvmContext<DB>,
+        db: &mut DB,
         inputs: &mut CallInputs,
     ) -> Option<CallOutcome> {
         if let Some(ins) = self.log_inspector.as_mut() {
-            ins.call(context, inputs);
+            ins.call(db, inputs);
         }
         if let Some(ins) = self.bug_inspector.as_mut() {
-            ins.call(context, inputs)
+            ins.call(db, inputs)
         } else {
             None
         }

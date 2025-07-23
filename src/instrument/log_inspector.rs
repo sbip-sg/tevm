@@ -1,10 +1,11 @@
 use crate::CALL_DEPTH;
 use lazy_static::lazy_static;
 use revm::{
-    Database, EvmContext, Inspector,
+    Database, Inspector,
     interpreter::{CallInputs, CallOutcome, CallScheme, CallValue, InstructionResult, Interpreter},
     primitives::{Address, B256, Bytes, Log as EvmLog, U256},
 };
+use revm::context::Context as EvmContext;
 use std::cell::Cell;
 use thread_local::ThreadLocal;
 

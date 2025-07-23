@@ -1,12 +1,14 @@
 use crate::{fork_provider::ForkProvider, response::RevmResult};
-use ::revm::{
-    Evm,
-    db::DbAccount,
-    primitives::{
-        AccountInfo, Address, Bytecode, CfgEnv, Env, ExecutionResult, HaltReason, TransactTo,
-        keccak256,
-    },
+use revm::{
+    handler::MainnetEvm,
+    primitives::{Address, keccak256, B256},
 };
+use revm::state::{Account as DbAccount, AccountInfo};
+use revm::bytecode::Bytecode;
+use revm::context::{CfgEnv, TxEnv};
+use revm::context::evm::Evm as Env;
+use revm::interpreter::{InstructionResult as ExecutionResult, SuccessOrHalt as HaltReason};
+use revm::context_interface::TransactTo;
 use alloy::{providers::ProviderBuilder, transports::http::reqwest::Url};
 use cache::DefaultProviderCache;
 use chain_inspector::ChainInspector;
@@ -18,10 +20,7 @@ use lazy_static::lazy_static;
 use num_bigint::BigInt;
 use pyo3::prelude::*;
 use response::{Response, SeenPcsMap, WrappedBug, WrappedHeuristics, WrappedMissedBranch};
-use revm::{
-    Database, inspector_handle_register,
-    primitives::{B256, TxEnv},
-};
+use revm::Database;
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -87,7 +86,7 @@ pub struct TinyEvmContext {}
 #[pyclass(unsendable)]
 pub struct TinyEVM {
     /// REVM instance
-    pub exe: Option<Evm<'static, ChainInspector, TinyEvmDb>>,
+    pub exe: Option<MainnetEvm<ChainInspector, TinyEvmDb>>,
     pub owner: Address,
     /// Default gas limit for each transaction
     #[pyo3(get, set)]
@@ -126,7 +125,7 @@ pub fn enable_tracing() -> Result<()> {
 
 // Implementations for use in Rust
 impl TinyEVM {
-    pub fn exe_mut(&mut self) -> &mut Evm<'static, ChainInspector, TinyEvmDb> {
+    pub fn exe_mut(&mut self) -> &mut MainnetEvm<ChainInspector, TinyEvmDb> {
         self.exe.as_mut().unwrap()
     }
 
@@ -601,7 +600,6 @@ impl TinyEVM {
             .modify_env(|e| *e = Box::new(env.clone()))
             .with_db(db.clone())
             .with_external_context(inspector)
-            .append_handler_register(inspector_handle_register)
             .build();
         let tinyevm = Self {
             exe: Some(exe),

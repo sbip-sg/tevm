@@ -5,11 +5,10 @@ use alloy::rpc::types::Block;
 use eyre::{ContextCompat, Result};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
-use revm::db::{AccountState, DbAccount};
-use revm::primitives::{
-    Account, AccountInfo, Address, B256, Bytecode, HashMap as RevmHashMap, KECCAK_EMPTY, U256,
-    keccak256,
-};
+use revm::state::{AccountStatus as AccountState, Account as DbAccount};
+use revm::primitives::{Address, B256, HashMap as RevmHashMap, KECCAK_EMPTY, U256, keccak256}; 
+use revm::state::{Account, AccountInfo};
+use revm::bytecode::Bytecode;
 use revm::{Database, DatabaseCommit};
 use std::env;
 use tracing::{debug, info, trace};

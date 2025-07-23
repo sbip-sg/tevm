@@ -3,7 +3,9 @@ use hashbrown::{HashMap, HashSet};
 use hex::ToHex;
 use num_bigint::BigInt;
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyString};
-use revm::primitives::{Address, ExecutionResult, Output};
+use revm::primitives::Address;
+use revm::interpreter::InstructionResult as ExecutionResult;
+// use revm::interpreter::Output;
 use ruint::aliases::U256;
 use std::{
     fmt::{Display, Formatter},
