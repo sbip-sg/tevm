@@ -1,17 +1,15 @@
 use crate::{fork_provider::ForkProvider, response::RevmResult};
 use ::revm::{
-    database::DbAccount,
-    primitives::{
-        Address, keccak256, B256,
-    },
-    state::{AccountInfo, Bytecode},
-    context::{CfgEnv, TxEnv, BlockEnv, Context},
+    MainBuilder,
+    context::{BlockEnv, CfgEnv, Context, TxEnv},
     context_interface::{
-        result::{ExecutionResult, HaltReason},
         JournalTr,
+        result::{ExecutionResult, HaltReason},
     },
+    database::DbAccount,
     database_interface::Database,
-    MainBuilder, ExecuteCommitEvm,
+    primitives::{Address, B256, keccak256},
+    state::{AccountInfo, Bytecode},
 };
 use alloy::{providers::ProviderBuilder, transports::http::reqwest::Url};
 use cache::DefaultProviderCache;
@@ -24,6 +22,7 @@ use lazy_static::lazy_static;
 use num_bigint::BigInt;
 use pyo3::prelude::*;
 use response::{Response, SeenPcsMap, WrappedBug, WrappedHeuristics, WrappedMissedBranch};
+use revm::InspectEvm;
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -89,7 +88,19 @@ pub struct TinyEvmContext {}
 #[pyclass(unsendable)]
 pub struct TinyEVM {
     /// REVM instance
-    pub exe: Option<revm::handler::MainnetEvm<revm::context::Context<BlockEnv, TxEnv, CfgEnv, TinyEvmDb, revm::context::Journal<TinyEvmDb>, ()>, ChainInspector>>,
+    pub exe: Option<
+        revm::handler::MainnetEvm<
+            revm::context::Context<
+                BlockEnv,
+                TxEnv,
+                CfgEnv,
+                TinyEvmDb,
+                revm::context::Journal<TinyEvmDb>,
+                (),
+            >,
+            ChainInspector,
+        >,
+    >,
     pub owner: Address,
     /// Default gas limit for each transaction
     #[pyo3(get, set)]
@@ -128,7 +139,19 @@ pub fn enable_tracing() -> Result<()> {
 
 // Implementations for use in Rust
 impl TinyEVM {
-    pub fn exe_mut(&mut self) -> &mut revm::handler::MainnetEvm<revm::context::Context<BlockEnv, TxEnv, CfgEnv, TinyEvmDb, revm::context::Journal<TinyEvmDb>, ()>, ChainInspector> {
+    pub fn exe_mut(
+        &mut self,
+    ) -> &mut revm::handler::MainnetEvm<
+        revm::context::Context<
+            BlockEnv,
+            TxEnv,
+            CfgEnv,
+            TinyEvmDb,
+            revm::context::Journal<TinyEvmDb>,
+            (),
+        >,
+        ChainInspector,
+    > {
         self.exe.as_mut().unwrap()
     }
 
@@ -277,16 +300,7 @@ impl TinyEVM {
 
         self.bug_inspector_mut().pcs_by_address.clear(); // If don't want to trace the deploy PCs
 
-        {
-            let tx = &mut self.exe.as_mut().unwrap().ctx.tx;
-            tx.caller = owner;
-            tx.kind = revm::primitives::TxKind::Create;
-            tx.data = contract_bytecode.clone().into();
-            tx.value = value;
-            tx.gas_limit = tx_gas_limit.unwrap_or(self.tx_gas_limit);
-        }
-
-        // todo this is read from global state, might be wrong
+        // Get the current nonce for the owner
         let nonce = self
             .exe
             .as_ref()
@@ -296,6 +310,16 @@ impl TinyEVM {
             .state
             .get(&owner)
             .map_or(0, |a| a.info.nonce);
+
+        {
+            let tx = &mut self.exe.as_mut().unwrap().ctx.tx;
+            tx.caller = owner;
+            tx.kind = revm::primitives::TxKind::Create;
+            tx.data = contract_bytecode.clone().into();
+            tx.value = value;
+            tx.gas_limit = tx_gas_limit.unwrap_or(self.tx_gas_limit);
+            tx.nonce = nonce;
+        }
         let address = owner.create(nonce);
 
         debug!("Calculated addresss: {:?}", address);
@@ -306,7 +330,7 @@ impl TinyEVM {
                 .insert(address, force_address);
         }
         let tx = self.exe.as_ref().unwrap().ctx.tx.clone();
-        let result = self.exe.as_mut().unwrap().transact_commit(tx);
+        let result = self.exe.as_mut().unwrap().inspect_one_tx(tx);
 
         trace!("deploy result: {:?}", result);
 
@@ -379,16 +403,28 @@ impl TinyEVM {
 
         {
             let tx_gas_limit = tx_gas_limit.unwrap_or(self.tx_gas_limit);
+            // Get the current nonce for the sender
+            let nonce = self
+                .exe
+                .as_ref()
+                .unwrap()
+                .ctx
+                .journaled_state
+                .state
+                .get(&sender)
+                .map_or(0, |a| a.info.nonce);
+            
             let tx = self.tx_mut();
             tx.caller = sender;
             tx.kind = revm::primitives::TxKind::Call(contract);
             tx.data = data.into();
             tx.value = value;
             tx.gas_limit = tx_gas_limit;
+            tx.nonce = nonce;
         }
 
         let tx = self.exe.as_ref().unwrap().ctx.tx.clone();
-        let result = self.exe_mut().transact_commit(tx);
+        let result = self.exe_mut().inspect_one_tx(tx);
 
         let addresses = self.created_addresses().clone();
         info!(
@@ -604,7 +640,7 @@ impl TinyEVM {
             local: Default::default(),
             error: Ok(()),
         };
-        
+
         // Build mainnet EVM with inspector
         let exe = ctx.build_mainnet_with_inspector(inspector);
         let tinyevm = Self {

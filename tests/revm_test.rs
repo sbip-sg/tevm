@@ -5,8 +5,8 @@ use hex::ToHex;
 use lazy_static::lazy_static;
 use num_bigint::BigInt;
 use rand::random;
-use revm::interpreter::opcode::{self, CREATE, CREATE2, SELFDESTRUCT};
-use revm::primitives::Address;
+use revm::bytecode::opcode;
+use revm::{context::ContextTr, primitives::Address};
 use ruint::aliases::U256;
 use std::collections::HashSet;
 use std::convert::TryInto;
@@ -436,7 +436,7 @@ fn test_deterministic_deploy_overwrite() -> Result<()> {
     );
 
     let c1_code = {
-        let accounts = &vm.exe.as_ref().unwrap().db().accounts;
+        let accounts = &vm.exe.as_ref().unwrap().db_ref().accounts;
         println!("accounts: {:?}", accounts);
         let account = accounts
             .get(&target_address)
@@ -919,7 +919,7 @@ fn test_blockhash() {
     ];
 
     for (block, hash) in test_cases {
-        let block_env = &mut vm.exe.as_mut().unwrap().block_mut();
+        let block_env = &mut vm.exe.as_mut().unwrap().block;
         block_env.number = block;
 
         let resp = vm
@@ -1075,10 +1075,9 @@ fn test_selfdestruct_and_create() {
 
     let bugs = resp.bug_data;
     assert!(
-        &bugs
-            .iter()
-            .clone()
-            .any(|b| matches!(b.bug_type, BugType::Unclassified) && b.opcode == SELFDESTRUCT),
+        &bugs.iter().clone().any(
+            |b| matches!(b.bug_type, BugType::Unclassified) && b.opcode == opcode::SELFDESTRUCT
+        ),
         "Selfdestruct should be detected"
     );
 
@@ -1087,7 +1086,7 @@ fn test_selfdestruct_and_create() {
             .iter()
             .clone()
             .any(|b| matches!(b.bug_type, BugType::Unclassified)
-                && (b.opcode == CREATE || b.opcode == CREATE2)),
+                && (b.opcode == opcode::CREATE || b.opcode == opcode::CREATE2)),
         "CREATE/CREATE2 should be detected"
     );
 }
