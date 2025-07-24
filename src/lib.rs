@@ -22,7 +22,7 @@ use lazy_static::lazy_static;
 use num_bigint::BigInt;
 use pyo3::prelude::*;
 use response::{Response, SeenPcsMap, WrappedBug, WrappedHeuristics, WrappedMissedBranch};
-use revm::InspectEvm;
+use revm::InspectCommitEvm;
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -300,16 +300,12 @@ impl TinyEVM {
 
         self.bug_inspector_mut().pcs_by_address.clear(); // If don't want to trace the deploy PCs
 
-        // Get the current nonce for the owner
-        let nonce = self
-            .exe
-            .as_ref()
-            .unwrap()
-            .ctx
-            .journaled_state
-            .state
-            .get(&owner)
-            .map_or(0, |a| a.info.nonce);
+        // Get the current nonce for the owner from the database
+        let nonce = self.db_mut()
+            .basic(owner)
+            .ok()
+            .flatten()
+            .map_or(0, |a| a.nonce);
 
         {
             let tx = &mut self.exe.as_mut().unwrap().ctx.tx;
@@ -330,7 +326,7 @@ impl TinyEVM {
                 .insert(address, force_address);
         }
         let tx = self.exe.as_ref().unwrap().ctx.tx.clone();
-        let result = self.exe.as_mut().unwrap().inspect_one_tx(tx);
+        let result = self.exe.as_mut().unwrap().inspect_tx_commit(tx);
 
         trace!("deploy result: {:?}", result);
 
@@ -401,19 +397,15 @@ impl TinyEVM {
         self.clear_instrumentation();
         CALL_DEPTH.get_or_default().set(0);
 
+        // Get the current nonce for the sender from the database
+        let nonce = self.db_mut()
+            .basic(sender)
+            .ok()
+            .flatten()
+            .map_or(0, |a| a.nonce);
+
         {
             let tx_gas_limit = tx_gas_limit.unwrap_or(self.tx_gas_limit);
-            // Get the current nonce for the sender
-            let nonce = self
-                .exe
-                .as_ref()
-                .unwrap()
-                .ctx
-                .journaled_state
-                .state
-                .get(&sender)
-                .map_or(0, |a| a.info.nonce);
-            
             let tx = self.tx_mut();
             tx.caller = sender;
             tx.kind = revm::primitives::TxKind::Call(contract);
@@ -424,7 +416,7 @@ impl TinyEVM {
         }
 
         let tx = self.exe.as_ref().unwrap().ctx.tx.clone();
-        let result = self.exe_mut().inspect_one_tx(tx);
+        let result = self.exe_mut().inspect_tx_commit(tx);
 
         let addresses = self.created_addresses().clone();
         info!(
