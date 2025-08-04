@@ -82,25 +82,26 @@ pub const DEFAULT_BALANCE: U256 =
 
 pub type TinyEvmDb = ForkDB<DefaultProviderCache>;
 
-pub struct TinyEvmContext {}
+pub type TinyEvmJournal = revm::context::Journal<TinyEvmDb>;
+
+pub type TinyEvmContext = revm::context::Context<
+    BlockEnv,
+    TxEnv,
+    CfgEnv,
+    TinyEvmDb,
+    TinyEvmJournal,
+    (),
+>;
+
+pub type TinyEvmExecutor = revm::handler::MainnetEvm<TinyEvmContext, ChainInspector>;
+
+pub struct TinyEvmContextStruct {}
 
 /// TinyEVM is a Python wrapper for REVM
 #[pyclass(unsendable)]
 pub struct TinyEVM {
     /// REVM instance
-    pub exe: Option<
-        revm::handler::MainnetEvm<
-            revm::context::Context<
-                BlockEnv,
-                TxEnv,
-                CfgEnv,
-                TinyEvmDb,
-                revm::context::Journal<TinyEvmDb>,
-                (),
-            >,
-            ChainInspector,
-        >,
-    >,
+    pub exe: Option<TinyEvmExecutor>,
     pub owner: Address,
     /// Default gas limit for each transaction
     #[pyo3(get, set)]
@@ -139,19 +140,7 @@ pub fn enable_tracing() -> Result<()> {
 
 // Implementations for use in Rust
 impl TinyEVM {
-    pub fn exe_mut(
-        &mut self,
-    ) -> &mut revm::handler::MainnetEvm<
-        revm::context::Context<
-            BlockEnv,
-            TxEnv,
-            CfgEnv,
-            TinyEvmDb,
-            revm::context::Journal<TinyEvmDb>,
-            (),
-        >,
-        ChainInspector,
-    > {
+    pub fn exe_mut(&mut self) -> &mut TinyEvmExecutor {
         self.exe.as_mut().unwrap()
     }
 
@@ -519,7 +508,7 @@ impl TinyEVM {
         let accounts = &db.accounts;
         let account = accounts
             .get(&addr)
-            .context(format!("Failed to get account for address: {:?}", addr))?;
+            .context(format!("Failed to get account for address: {addr:?}"))?;
         account
             .storage
             .get(&index)
@@ -627,7 +616,7 @@ impl TinyEVM {
             block: block_env,
             tx: tx_env,
             cfg: cfg_env,
-            journaled_state: revm::context::Journal::new(db.clone()),
+            journaled_state: TinyEvmJournal::new(db.clone()),
             chain: (),
             local: Default::default(),
             error: Ok(()),
@@ -668,7 +657,7 @@ impl TinyEVM {
     pub fn get_forked_addresses(&self) -> Result<Vec<String>> {
         let db = self.exe.as_ref().unwrap().ctx.journaled_state.db();
         let addresses = &db.remote_addresses;
-        addresses.keys().map(|a| Ok(format!("0x{:x}", a))).collect()
+        addresses.keys().map(|a| Ok(format!("0x{a:x}"))).collect()
     }
 
     /// Get remotely loaded slot indices by address

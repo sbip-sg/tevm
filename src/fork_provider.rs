@@ -67,7 +67,7 @@ impl<T: ProviderCache> ForkProvider<T> {
         address: &Address,
         block_number: Option<u64>,
     ) -> Result<u64> {
-        let address_str = format!("{:x}", address);
+        let address_str = format!("{address:x}");
         if let Some(block_number) = block_number {
             if let Ok(cached) =
                 self.cache
@@ -94,7 +94,7 @@ impl<T: ProviderCache> ForkProvider<T> {
 
     /// Get the balance of an address
     pub fn get_balance(&mut self, address: &Address, block_number: Option<u64>) -> Result<U256> {
-        let address_str = format!("{:x}", address);
+        let address_str = format!("{address:x}");
         if let Some(block_number) = block_number {
             if let Ok(cached) = self
                 .cache
@@ -120,7 +120,7 @@ impl<T: ProviderCache> ForkProvider<T> {
                 block_number,
                 "eth_getBalance",
                 &address_str,
-                &format!("{:x}", balance),
+                &format!("{balance:x}"),
             )?;
         }
 
@@ -128,7 +128,7 @@ impl<T: ProviderCache> ForkProvider<T> {
     }
 
     pub fn get_code(&mut self, address: &Address, block_number: Option<u64>) -> Result<Bytes> {
-        let address_str = format!("{:x}", address);
+        let address_str = format!("{address:x}");
         if let Some(block_number) = block_number {
             if let Ok(cached) = self
                 .cache
@@ -154,7 +154,7 @@ impl<T: ProviderCache> ForkProvider<T> {
                 block_number,
                 "eth_getCode",
                 &address_str,
-                &format!("{:x}", code),
+                &format!("{code:x}"),
             )?;
         }
         Ok(code)
@@ -165,7 +165,7 @@ impl<T: ProviderCache> ForkProvider<T> {
             "eth",
             block_number,
             "eth_getBlockByNumber",
-            &format!("{:x}", block_number),
+            &format!("{block_number:x}"),
         ) {
             return Ok(Some(serde_json::from_str(&cached).unwrap()));
         }
@@ -177,7 +177,7 @@ impl<T: ProviderCache> ForkProvider<T> {
             "eth",
             block_number,
             "eth_getBlockByNumber",
-            &format!("{:x}", block_number),
+            &format!("{block_number:x}"),
             &serde_json::to_string(&block)?,
         );
         Ok(block)
@@ -189,7 +189,7 @@ impl<T: ProviderCache> ForkProvider<T> {
         index: &U256,
         block_number: Option<u64>,
     ) -> Result<U256> {
-        let store_key = format!("{:x}-{:x}", address, index);
+        let store_key = format!("{address:x}-{index:x}");
 
         if let Some(block_number) = block_number {
             if let Ok(cached) = self
@@ -221,7 +221,7 @@ impl<T: ProviderCache> ForkProvider<T> {
                 block_number,
                 "eth_getStorageAt",
                 &store_key,
-                &format!("{:x}", storage),
+                &format!("{storage:x}"),
             )?;
         }
 

@@ -80,7 +80,7 @@ fn check_expected_bugs_are_found(expected: Vec<(BugType, usize)>, found: Vec<Bug
         .map(|bug| (bug.bug_type, bug.position))
         .collect();
 
-    println!("Found bugs: {:?}", found_bugs);
+    println!("Found bugs: {found_bugs:?}");
 
     let diff: HashSet<_> = expected_bugs.difference(&found_bugs).collect();
     assert_eq!(0, diff.len(), "Expected bugs {diff:#?} should be found");
@@ -89,7 +89,7 @@ fn check_expected_bugs_are_found(expected: Vec<(BugType, usize)>, found: Vec<Bug
 fn t_erc20_balance_query(vm: &mut TinyEVM, address: Address, expected_balance: U256) {
     let prefix = fn_sig_to_prefix("balanceOf(address)");
     let data = format!("{:0<32}{:0>40}", prefix, address.encode_hex::<String>());
-    println!("data: {}", data);
+    println!("data: {data}");
     let data = hex::decode(data).unwrap();
     let resp = vm.contract_call_helper(*CONTRACT_ADDRESS, *OWNER, data, UZERO, None);
     assert!(
@@ -154,7 +154,7 @@ fn test_contract_method_revert() {
 
     let bin = make_transfer_bin(*TO_ADDRESS, U256::MAX);
     let result = exe.contract_call_helper(*CONTRACT_ADDRESS, *OWNER, bin, UZERO, None);
-    println!("T resp: {:?}", result);
+    println!("T resp: {result:?}");
     assert!(!result.success, "Call contract should revert");
 }
 
@@ -182,7 +182,7 @@ fn single_bugtype_test_helper(
     println!("Contract deployed to {}", address.encode_hex::<String>());
 
     let prefix = fn_sig_to_prefix(fn_sig);
-    let add_hex = format!("{}{}", prefix, trim_prefix(fn_args_hex, "0x"));
+    let add_hex = format!("{prefix}{}", trim_prefix(fn_args_hex, "0x"));
 
     println!("Contract fn hex: {add_hex}");
     let data = hex::decode(add_hex).unwrap();
@@ -190,7 +190,7 @@ fn single_bugtype_test_helper(
     let mut has_revert = false;
     for _ in 0..runs {
         let resp = vm.contract_call_helper(address, owner, data.clone(), UZERO, None);
-        println!("contract {} returns: {:?}", fn_sig, resp);
+        println!("contract {fn_sig} returns: {resp:?}");
 
         has_revert = has_revert || !resp.success;
     }
@@ -423,11 +423,7 @@ fn test_deterministic_deploy_overwrite() -> Result<()> {
         )
         .unwrap();
 
-    assert!(
-        c1.success,
-        "Deploy the first time should succeed, resp: {:?}",
-        c1
-    );
+    assert!(c1.success, "Deploy the first time should succeed, resp: {c1:?}");
 
     let c1_address = Address::from_slice(&c1.data);
     assert_eq!(
@@ -437,7 +433,7 @@ fn test_deterministic_deploy_overwrite() -> Result<()> {
 
     let c1_code = {
         let accounts = &vm.exe.as_ref().unwrap().db_ref().accounts;
-        println!("accounts: {:?}", accounts);
+        println!("accounts: {accounts:?}");
         let account = accounts
             .get(&target_address)
             .context("Expecting first account has non nil value")?;
@@ -448,11 +444,7 @@ fn test_deterministic_deploy_overwrite() -> Result<()> {
         .deploy_helper(*OWNER, contract_deploy_bin, UZERO, None, force_address)
         .unwrap();
 
-    assert!(
-        c2.success,
-        "Deploy the second time should also succeed, resp: {:?}",
-        c2
-    );
+    assert!(c2.success, "Deploy the second time should also succeed, resp: {c2:?}");
 
     let c2_address = Address::from_slice(&c2.data);
 
@@ -484,17 +476,13 @@ fn test_heuristics_inner(
     let fn_sig_hex = fn_sig_to_prefix(fn_sig);
     let fn_args_hex = format!("{:0>64x}", U256::from(input));
 
-    let fn_hex = format!("{}{}", fn_sig_hex, fn_args_hex);
+    let fn_hex = format!("{fn_sig_hex}{fn_args_hex}");
 
     let tx_data = hex::decode(fn_hex).unwrap();
 
     let resp = exe.contract_call_helper(address, *OWNER, tx_data, UZERO, None);
 
-    assert!(
-        resp.success,
-        "Transaction should succeed with input {}",
-        input
-    );
+    assert!(resp.success, "Transaction should succeed with input {input}");
 
     let heuristics = resp.heuristics;
 
@@ -505,17 +493,9 @@ fn test_heuristics_inner(
         .skip(4) // skip 4 from function selector operations
         .collect();
 
-    assert_eq!(
-        expected_missed_branches, missed_branches,
-        "All missed branches should be found with expected distances with input {}",
-        input
-    );
+    assert_eq!(expected_missed_branches, missed_branches, "All missed branches should be found with expected distances with input {input}");
 
-    assert_eq!(
-        expected_coverages, coverage,
-        "List of coverage PCs should match with input {}",
-        input
-    );
+    assert_eq!(expected_coverages, coverage, "List of coverage PCs should match with input {input}");
 }
 
 #[test]
@@ -559,7 +539,7 @@ fn test_heuristics_signed_int() {
     let fn_sig = "coverage(int256)";
     let fn_sig_hex = fn_sig_to_prefix(fn_sig);
     let neg_50 = (!U256::from(50)).add(U256::from(1));
-    let fn_args_hex = format!("{:0>64x}", neg_50);
+    let fn_args_hex = format!("{neg_50:0>64x}");
 
     assert_eq!(
         "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffce", fn_args_hex,
@@ -577,7 +557,7 @@ fn test_heuristics_signed_int() {
     .map(|(prev_pc, pc, distance)| (prev_pc, pc, true, U256::from(distance as u64), 0).into())
     .collect();
 
-    let fn_hex = format!("{}{}", fn_sig_hex, fn_args_hex);
+    let fn_hex = format!("{fn_sig_hex}{fn_args_hex}");
 
     let tx_data = hex::decode(fn_hex).unwrap();
 
@@ -617,7 +597,7 @@ fn test_bug_data_in_deploy() {
 
     vm.set_account_balance(owner, U256::MAX).unwrap();
 
-    let bytecode = hex::decode(format!("{}{}", contract_hex, constructor_args_hex)).unwrap();
+    let bytecode = hex::decode(format!("{contract_hex}{constructor_args_hex}")).unwrap();
 
     let resp = vm
         .deploy_helper(owner, bytecode, UZERO, None, None)
@@ -649,14 +629,14 @@ fn test_deploy_with_args_and_value() {
     let a = U256::from_str_radix("ccaa", 16).unwrap();
     let b = U256::from_str_radix("ffee", 16).unwrap();
     let value = U256::from_str_radix("fffffffff", 16).unwrap();
-    let constructor_args_hex = format!("{:0>64x}{:0>64x}", a, b);
+    let constructor_args_hex = format!("{a:0>64x}{b:0>64x}");
 
     let mut vm = TinyEVM::default();
     let owner = OWNER.to_owned();
 
     vm.set_account_balance(owner, U256::MAX).unwrap();
 
-    let bytecode = hex::decode(format!("{}{}", contract_hex, constructor_args_hex)).unwrap();
+    let bytecode = hex::decode(format!("{contract_hex}{constructor_args_hex}")).unwrap();
 
     let resp = vm
         .deploy_helper(owner, bytecode, value, None, None)
@@ -688,7 +668,7 @@ fn test_deploy_with_args_and_value() {
         );
 
         let v = U256::from_be_bytes::<32>(resp.data.as_slice().try_into().unwrap());
-        assert_eq!(expected_value, v, "Incorrect value read from {}", fn_sig);
+        assert_eq!(expected_value, v, "Incorrect value read from {fn_sig}");
     };
 
     t_read_value("x()", a);
@@ -761,9 +741,9 @@ fn test_set_get_storage() {
     deploy_hex!("../tests/contracts/storage.hex", exe, addr);
     let index = U256::ZERO;
     let target_value = U256::from(99u64);
-    let address = format!("{:040x}", addr);
-    let index = format!("{:064x}", index);
-    let value = format!("{:064x}", target_value);
+    let address = format!("{addr:040x}");
+    let index = format!("{index:064x}");
+    let value = format!("{target_value:064x}");
 
     let r = exe.set_storage(address.clone(), index.clone(), value);
     assert!(
@@ -783,18 +763,10 @@ fn test_set_get_storage() {
     let bin = hex::decode(fn_sig_hex).unwrap();
     let resp = exe.contract_call_helper(addr, owner, bin, UZERO, None);
 
-    assert!(
-        resp.success,
-        "Call val() to get value should succeed in resp: {:?}",
-        resp
-    );
+    assert!(resp.success, "Call val() to get value should succeed in resp: {resp:?}");
 
     let result = U256::from_be_bytes::<32>(resp.data.as_slice().try_into().unwrap());
-    assert_eq!(
-        target_value, result,
-        "Set storage should modify the corresponding value in contract in {:?}",
-        resp
-    );
+    assert_eq!(target_value, result, "Set storage should modify the corresponding value in contract in {resp:?}");
 }
 
 #[test]
@@ -814,7 +786,7 @@ fn test_set_get_code() {
         .unwrap()
         .encode_hex::<String>();
 
-    println!("actual {}", actual);
+    println!("actual {actual}");
 
     assert!(
         &actual.starts_with(bytecode),
@@ -833,7 +805,7 @@ fn test_exp_overflow() {
     let bin = format!("{}{:0>64x}", fn_sig_hex, 200);
     let bin = hex::decode(bin).unwrap();
 
-    println!("Calling deployed contract: {:?}", address);
+    println!("Calling deployed contract: {address:?}");
     println!(
         "Current accounts: {:?}",
         vm.exe.as_ref().unwrap().db().accounts
@@ -853,11 +825,7 @@ fn test_exp_overflow() {
 
     let bugs = &resp.bug_data;
 
-    assert!(
-        &bugs.iter().any(|b| b.opcode == opcode::EXP),
-        "Expecting exp overflow in {:?}",
-        bugs
-    );
+    assert!(&bugs.iter().any(|b| b.opcode == opcode::EXP), "Expecting exp overflow in {bugs:?}");
 }
 
 fn single_run_test_helper(contract_bin_hex: &str, fn_sig: &str, tests: Vec<IntegerTestData>) {
@@ -866,7 +834,7 @@ fn single_run_test_helper(contract_bin_hex: &str, fn_sig: &str, tests: Vec<Integ
             if arg == U256::ZERO {
                 "0".repeat(64) // temporary fix for 0 value
             } else {
-                format!("{:0>64x}", arg)
+                format!("{arg:0>64x}")
             }
         };
         single_bugtype_test_helper(
@@ -892,7 +860,7 @@ fn test_deadloop() {
     let resp = vm.contract_call_helper(address, owner, bin, UZERO, None);
 
     assert!(!resp.success, "Expect deadloop to crash");
-    println!("resp: {:?}", resp);
+    println!("resp: {resp:?}");
     assert!(
         resp.gas_usage >= TX_GAS_LIMIT,
         "Gas usage should exceed the tx max gas limit"
@@ -978,15 +946,15 @@ fn test_tod() {
     );
 
     let val = U256::from(1);
-    let arg_hex = format!("{:0>64x}", val);
-    let bin = format!("{}{}", fn_sig_to_prefix("write_a(uint256)"), arg_hex);
+    let arg_hex = format!("{val:0>64x}");
+    let bin = format!("{}{arg_hex}", fn_sig_to_prefix("write_a(uint256)"));
     let bin = hex::decode(bin).unwrap();
 
     let resp = vm.contract_call_helper(addr, owner, bin, UZERO, None);
     assert!(resp.success, "Call should succeed");
     let bugs = vm.bug_data().clone();
 
-    println!("{:?}", bugs);
+    println!("{bugs:?}");
 
     let idx = U256::from_str_radix(
         "77889682276648159348121498188387380826073215901308117747004906171223545284475",
@@ -1041,7 +1009,7 @@ fn test_get_set_balance() {
 
     let bin = hex::decode(fn_sig_to_prefix("selfbalance()")).unwrap();
     let resp = vm.contract_call_helper(addr, owner, bin, UZERO, None);
-    assert!(resp.success, "Call error {:?}", resp);
+    assert!(resp.success, "Call error {resp:?}");
     assert_eq!(
         target_balance,
         U256::from_be_bytes::<32>(resp.data.try_into().unwrap()),
@@ -1056,7 +1024,7 @@ fn test_get_set_balance() {
 
     let bin = hex::decode(bin).unwrap();
     let resp = vm.contract_call_helper(addr, owner, bin, UZERO, None);
-    assert!(resp.success, "Call error {:?}", resp);
+    assert!(resp.success, "Call error {resp:?}");
     assert_eq!(
         target_balance,
         U256::from_be_bytes::<32>(resp.data.try_into().unwrap()),
@@ -1071,7 +1039,7 @@ fn test_selfdestruct_and_create() {
 
     let bin = hex::decode(fn_sig_to_prefix("kill()")).unwrap();
     let resp = vm.contract_call_helper(addr, *OWNER, bin, UZERO, None);
-    assert!(resp.success, "Call error {:?}", resp);
+    assert!(resp.success, "Call error {resp:?}");
 
     let bugs = resp.bug_data;
     assert!(
@@ -1113,7 +1081,7 @@ fn test_seen_pcs() {
         U256::from_str_radix("999999", 16).unwrap(),
         None,
     );
-    assert!(resp.success, "Call error {:?}", resp);
+    assert!(resp.success, "Call error {resp:?}");
 
     let seen_pcs = &vm.pcs_by_address().get(&address);
     assert!(
@@ -1122,7 +1090,7 @@ fn test_seen_pcs() {
     );
     let seen_pcs = seen_pcs.unwrap();
 
-    println!("Seen PCs: {:?}", seen_pcs);
+    println!("Seen PCs: {seen_pcs:?}");
     assert!(!seen_pcs.is_empty(), "Seen PCs should have some values");
 }
 
@@ -1148,7 +1116,7 @@ fn test_runtime_configuration() {
         U256::from_str_radix("999999", 16).unwrap(),
         None,
     );
-    assert!(resp.success, "Call error {:?}", resp);
+    assert!(resp.success, "Call error {resp:?}");
 
     let seen_pcs = &vm.pcs_by_address().get(&address);
     assert!(
@@ -1167,7 +1135,7 @@ fn test_library_method_with_large_string() {
         .map(hex::encode)
         .collect();
 
-    let add_hex = format!("{}{}", fn_sig_to_prefix(fn_sig), fn_args_hex);
+    let add_hex = format!("{}{fn_args_hex}", fn_sig_to_prefix(fn_sig));
     let data = hex::decode(add_hex).unwrap();
     let r = vm.contract_call_helper(address, *OWNER, data, UZERO, None);
     assert!(r.success);
@@ -1183,10 +1151,7 @@ fn test_reset_storage() {
 
     let target_value = U256::from(99u64);
 
-    println!(
-        "Setting storage for address: {:?} index: {:?} to value: {:?}",
-        addr, index, target_value
-    );
+    println!("Setting storage for address: {addr:?} index: {index:?} to value: {target_value:?}");
 
     let r = vm.set_storage_by_address(addr, index, target_value);
 
@@ -1201,9 +1166,9 @@ fn test_reset_storage() {
     );
 
     let r = vm.reset_storage(addr);
-    println!("r: {:?}", r);
+    println!("r: {r:?}");
     let val = vm.get_storage_by_address(addr, index);
-    println!("val: {:?}", val);
+    println!("val: {val:?}");
     assert!(val.is_ok(), "Get storage should return some data");
     assert_eq!(U256::ZERO, val.unwrap(), "Storage should be cleared");
 }
@@ -1221,14 +1186,14 @@ fn test_sha3_mapping() {
         U256::from(256u64),
     );
 
-    let bin = format!("{}{}", prefix, args);
-    println!("bin: {}", bin);
+    let bin = format!("{prefix}{args}");
+    println!("bin: {bin}");
     let bin = hex::decode(bin).unwrap();
 
     let resp = vm.contract_call_helper(addr, *OWNER, bin, UZERO, None);
-    assert!(resp.success, "Call error {:?}", resp);
+    assert!(resp.success, "Call error {resp:?}");
     let actual_mapping = resp.heuristics.sha3_mapping;
-    println!("sha3_mappings: {:?}", actual_mapping);
+    println!("sha3_mappings: {actual_mapping:?}");
     let expected_hash = U256::from_str_radix(
         "036b6384b5eca791c62761152d0c79bb0604c104a5fb6f4eb0703f3154bb3db0",
         16,
@@ -1261,7 +1226,7 @@ fn test_seen_addresses() {
     assert!(resp.success, "Deploy contract A should succeed");
     let addr_a = Address::from_slice(&resp.data);
 
-    println!("address A: {:?}", addr_a);
+    println!("address A: {addr_a:?}");
 
     {
         let config = vm.instrument_config_mut();
@@ -1271,7 +1236,7 @@ fn test_seen_addresses() {
 
     let bytecode = include_str!("./contracts/contract_addresses_B.hex");
     let bytecode = format!("{}{:0>64}", bytecode, addr_a.encode_hex::<String>());
-    println!("Deploying contract B with bytecode: {}", bytecode);
+    println!("Deploying contract B with bytecode: {bytecode}");
     let bytecode = hex::decode(bytecode).unwrap();
     let resp = vm
         .deploy_helper(*OWNER, bytecode, UZERO, None, None)
@@ -1284,21 +1249,21 @@ fn test_seen_addresses() {
 
     let addr = Address::from_slice(&resp.data);
 
-    println!("address B: {:?}", addr);
+    println!("address B: {addr:?}");
 
     let prefix = fn_sig_to_prefix("getBlockNumber()");
     let args = "";
 
-    let bin = format!("{}{}", prefix, args);
+    let bin = format!("{prefix}{args}");
 
     let bin = hex::decode(bin).unwrap();
 
     let resp = vm.contract_call_helper(addr, *OWNER, bin, UZERO, None);
-    println!("resp: {:?}", resp);
-    assert!(resp.success, "Call error {:?}", resp);
+    println!("resp: {resp:?}");
+    assert!(resp.success, "Call error {resp:?}");
 
     let seen = resp.heuristics.seen_addresses;
-    println!("seen_addresses: {:?}", seen);
+    println!("seen_addresses: {seen:?}");
 
     assert!(seen.contains(&addr_a), "Contract A should be seen");
     assert!(seen.contains(&addr), "Contract B should be seen");
@@ -1316,14 +1281,14 @@ fn test_distance_signed() {
     let fn_sig = "sign_distance(int256)";
     let fn_sig_hex = fn_sig_to_prefix(fn_sig);
     let input = U256::from(5);
-    let fn_args_hex = format!("{:0>64x}", input);
+    let fn_args_hex = format!("{input:0>64x}");
 
     let expected_distances = [
         6, // distance at line 4
         7, // distance at line 6
     ];
 
-    let fn_hex = format!("{}{}", fn_sig_hex, fn_args_hex);
+    let fn_hex = format!("{fn_sig_hex}{fn_args_hex}");
 
     let tx_data = hex::decode(fn_hex).unwrap();
 
@@ -1345,17 +1310,14 @@ fn test_distance_signed() {
         .map(|b| b.distance)
         .collect::<Vec<_>>();
 
-    println!("Missed branches distances: {:?}", missed_branches_distance);
+    println!("Missed branches distances: {missed_branches_distance:?}");
 
     let failed_to_find = expected_distances
         .iter()
         .filter(|d| !(missed_branches_distance.contains(&U256::from(**d))))
         .collect::<Vec<_>>();
 
-    println!(
-        "Failed to find missed branches distances: {:?}",
-        failed_to_find
-    );
+    println!("Failed to find missed branches distances: {failed_to_find:?}");
     assert!(
         failed_to_find.is_empty(),
         "All expected distances should be found"
@@ -1374,12 +1336,12 @@ fn test_peephole_optimized_if_equal() {
     let fn_sig = "func1(uint8)";
     let fn_sig_hex = fn_sig_to_prefix(fn_sig);
     let input = U256::from(1);
-    let fn_args_hex = format!("{:0>64x}", input);
+    let fn_args_hex = format!("{input:0>64x}");
 
     let expected_missed_branches: (usize, usize, U256) = (166, 181, U256::from(0x2007));
     // [MissedBranch { prev_pc: 11, cond: true, dest_pc: 16, distance: 115792089237316195423570985008687907853269984665640564039457584007913129639935, address_index: 0 }, MissedBranch { prev_pc: 25, cond: false, dest_pc: 65, distance: 33, address_index: 0 }, MissedBranch { prev_pc: 42, cond: true, dest_pc: 70, distance: 1, address_index: 0 }, MissedBranch { prev_pc: 354, cond: true, dest_pc: 363, distance: 1, address_index: 0 }, MissedBranch { prev_pc: 312, cond: true, dest_pc: 317, distance: 1, address_index: 0 }, MissedBranch { prev_pc: 166, cond: true, dest_pc: 181, distance: 8199, address_index: 0 }]
 
-    let fn_hex = format!("{}{}", fn_sig_hex, fn_args_hex);
+    let fn_hex = format!("{fn_sig_hex}{fn_args_hex}");
 
     let tx_data = hex::decode(fn_hex).unwrap();
 
@@ -1428,9 +1390,9 @@ fn test_fork_ethereum() -> Result<()> {
     let value = None;
     let result = evm.contract_call(contract, sender, data, value)?;
 
-    assert!(result.success, "Call error {:?}", result);
+    assert!(result.success, "Call error {result:?}");
 
-    println!("result: {:?}", result);
+    println!("result: {result:?}");
 
     let balance: [u8; 32] = result.data.as_slice().try_into()?;
     let balance = U256::from_be_bytes(balance);
@@ -1462,7 +1424,7 @@ fn test_call_forked_contract_from_local_contract() -> Result<()> {
 
     let resp = evm.deploy(bin.into(), None)?;
 
-    assert!(resp.success, "Deploy error {:?}", resp);
+    assert!(resp.success, "Deploy error {resp:?}");
 
     let wbnb_address: String = "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c".into();
 
@@ -1482,7 +1444,7 @@ fn test_call_forked_contract_from_local_contract() -> Result<()> {
 
     let resp = evm.contract_call(wbnb_address, Some(sender), None, Some(value))?;
 
-    assert!(resp.success, "Call error {:?}", resp);
+    assert!(resp.success, "Call error {resp:?}");
 
     let block_number = evm.get_env_value_by_field("block_number".into()).unwrap();
 
@@ -1490,10 +1452,7 @@ fn test_call_forked_contract_from_local_contract() -> Result<()> {
         .get_env_value_by_field("block_timestamp".into())
         .unwrap();
 
-    println!(
-        "block_number: {} block_timestamp: {}",
-        block_number, block_timestamp
-    );
+    println!("block_number: {block_number} block_timestamp: {block_timestamp}");
 
     let remote_addresses = evm.get_forked_addresses()?;
     let remote_addresses = remote_addresses
@@ -1544,7 +1503,7 @@ fn test_sturdy_hack() -> Result<()> {
 
     let resp = evm.deploy(bin.into(), None)?;
 
-    assert!(resp.success, "Deploy error {:?}", resp);
+    assert!(resp.success, "Deploy error {resp:?}");
 
     let attacker = format!("0x{:0>40}", hex::encode(&resp.data));
 
@@ -1591,23 +1550,23 @@ fn test_events() -> Result<()> {
     let bin = include_str!("../tests/contracts/TestEvents.hex");
     let mut vm = TinyEVM::default();
     let resp = vm.deploy(bin.into(), None)?;
-    assert!(resp.success, "Deploy error {:?}", resp);
+    assert!(resp.success, "Deploy error {resp:?}");
     let contract = format!("0x{:0>40}", hex::encode(&resp.data));
-    println!("Contract address: {}", contract);
+    println!("Contract address: {contract}");
     let data = format!(
         "{}{:064x}",
         "1401d2b5", // makeEvent(3232)
         U256::from(3232)
     );
     let resp = vm.contract_call(contract.clone(), None, Some(data.clone()), None)?;
-    assert!(resp.success, "Call error {:?}", resp);
+    assert!(resp.success, "Call error {resp:?}");
     assert!(resp.events.is_empty(), "Expecting no events");
     assert!(resp.traces.is_empty(), "Expecting no call traces");
 
     vm.set_evm_tracing(true);
     let resp = vm.contract_call(contract.clone(), None, Some(data), None)?;
 
-    assert!(resp.success, "Call error {:?}", resp);
+    assert!(resp.success, "Call error {resp:?}");
     assert!(resp.events.len() == 1, "Expecting one event");
     assert!(resp.traces.len() == 1, "Expecting one call trace");
     let event = resp.events.first().unwrap();
