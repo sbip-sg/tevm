@@ -5,14 +5,92 @@ use alloy::rpc::types::Block;
 use eyre::{ContextCompat, Result};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
-use revm::db::{AccountState, DbAccount};
+use revm::database::{AccountState, DbAccount};
 use revm::primitives::{
-    Account, AccountInfo, Address, B256, Bytecode, HashMap as RevmHashMap, KECCAK_EMPTY, U256,
+    Address, B256, HashMap as RevmHashMap, KECCAK_EMPTY, U256,
     keccak256,
 };
-use revm::{Database, DatabaseCommit};
+use revm::state::{Account, AccountInfo};
+use revm::bytecode::Bytecode;
+use revm::database_interface::{Database, DatabaseCommit, DBErrorMarker};
 use std::env;
+use std::fmt;
 use tracing::{debug, info, trace};
+
+
+/// Custom database error type that wraps eyre::Error
+#[derive(Debug)]
+pub struct ForkDBError {
+    inner: eyre::Error,
+}
+
+impl ForkDBError {
+    /// Create a new ForkDBError from an eyre::Error
+    pub fn new(err: eyre::Error) -> Self {
+        Self { inner: err }
+    }
+
+    /// Create a new ForkDBError from any error type
+    pub fn from_error<E: Into<eyre::Error>>(err: E) -> Self {
+        Self { inner: err.into() }
+    }
+
+    /// Get the inner eyre::Error
+    pub fn inner(&self) -> &eyre::Error {
+        &self.inner
+    }
+
+    /// Convert into the inner eyre::Error
+    pub fn into_inner(self) -> eyre::Error {
+        self.inner
+    }
+
+    /// Convert a Result<T, ForkDBError> to Result<T, eyre::Error>
+    pub fn into_eyre_result<T>(result: Result<T, Self>) -> Result<T> {
+        result.map_err(|e| e.into_inner())
+    }
+}
+
+impl fmt::Display for ForkDBError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ForkDB Error: {}", self.inner)
+    }
+}
+
+impl std::error::Error for ForkDBError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.inner.source()
+    }
+}
+
+impl DBErrorMarker for ForkDBError {}
+
+impl From<eyre::Error> for ForkDBError {
+    fn from(err: eyre::Error) -> Self {
+        Self::new(err)
+    }
+}
+
+// Note: We don't implement From<ForkDBError> for eyre::Error to avoid conflicts
+// Use .into_inner() method instead to get the inner eyre::Error
+
+impl From<std::io::Error> for ForkDBError {
+    fn from(err: std::io::Error) -> Self {
+        Self::from_error(err)
+    }
+}
+
+impl From<String> for ForkDBError {
+    fn from(err: String) -> Self {
+        Self::from_error(eyre::eyre!(err))
+    }
+}
+
+impl From<&str> for ForkDBError {
+    fn from(err: &str) -> Self {
+        Self::from_error(eyre::eyre!(err.to_string()))
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct ForkDB<T: ProviderCache> {
@@ -190,7 +268,7 @@ impl<T: ProviderCache> ForkDB<T> {
 
 // The database methods reload from remote endpoint if the data is missing
 impl<T: ProviderCache> Database for ForkDB<T> {
-    type Error = eyre::Error;
+    type Error = ForkDBError;
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         let add = Address::from(address.0);
 

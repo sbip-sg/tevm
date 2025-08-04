@@ -3,7 +3,8 @@ use hashbrown::{HashMap, HashSet};
 use hex::ToHex;
 use num_bigint::BigInt;
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyString};
-use revm::primitives::{Address, ExecutionResult, Output};
+use revm::primitives::Address;
+use revm::context_interface::result::{ExecutionResult, Output};
 use ruint::aliases::U256;
 use std::{
     fmt::{Display, Formatter},
@@ -93,7 +94,7 @@ impl Display for WrappedHeuristics {
 impl WrappedHeuristics {
     /// Get the string representation
     fn __str__(&self, py: Python<'_>) -> Py<PyString> {
-        PyString::new(py, &format!("{:?}", self)).into()
+        PyString::new(py, &format!("{self:?}")).into()
     }
 }
 
@@ -113,7 +114,7 @@ impl From<Heuristics> for WrappedHeuristics {
             .collect();
         let mut sha3_mapping = StdHashMap::new();
         for (k, v) in heuristics.sha3_mapping {
-            sha3_mapping.insert(format!("0x{:x}", k), v);
+            sha3_mapping.insert(format!("0x{k:x}"), v);
         }
         let mut seen_addresses = Vec::new();
         for addr in heuristics.seen_addresses {
@@ -312,7 +313,7 @@ impl From<CallTrace> for PyCallTrace {
                 .map(|x| format!("0x{}", x.encode_hex::<String>()))
                 .unwrap_or_default(),
             is_static: trace.is_static,
-            status: trace.status.map(|x| format!("{:?}", x)).unwrap_or_default(),
+            status: trace.status.map(|x| format!("{x:?}")).unwrap_or_default(),
         }
     }
 }
@@ -393,7 +394,7 @@ impl From<RevmResult> for Response {
         let exit_reason = match result {
             ExecutionResult::Success { .. } => "Success".into(),
             ExecutionResult::Revert { .. } => "Revert".into(),
-            ExecutionResult::Halt { reason, .. } => format!("{:?}", reason),
+            ExecutionResult::Halt { reason, .. } => format!("{reason:?}"),
         };
 
         let data = match result {

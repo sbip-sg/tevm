@@ -1,6 +1,6 @@
-use revm::interpreter::{CallInputs, CallOutcome, CreateInputs, CreateOutcome};
+use revm::interpreter::{CallInputs, CallOutcome, CreateInputs, CreateOutcome, Interpreter};
 use revm::primitives::Log;
-use revm::{Database, EvmContext, Inspector, interpreter::Interpreter};
+use revm::inspector::Inspector;
 
 use crate::instrument::bug_inspector::BugInspector;
 use crate::instrument::log_inspector::LogInspector;
@@ -11,9 +11,13 @@ pub struct ChainInspector {
     pub bug_inspector: Option<BugInspector>,
 }
 
-impl<DB: Database> Inspector<DB> for ChainInspector {
+impl<CTX> Inspector<CTX> for ChainInspector 
+where
+    CTX: revm::context_interface::ContextTr,
+    CTX::Journal: revm::inspector::JournalExt,
+{
     #[inline]
-    fn step(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
+    fn step(&mut self, interp: &mut Interpreter, context: &mut CTX) {
         if let Some(ins) = self.log_inspector.as_mut() {
             ins.step(interp, context);
         }
@@ -23,7 +27,7 @@ impl<DB: Database> Inspector<DB> for ChainInspector {
     }
 
     #[inline]
-    fn step_end(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
+    fn step_end(&mut self, interp: &mut Interpreter, context: &mut CTX) {
         if let Some(ins) = self.log_inspector.as_mut() {
             ins.step_end(interp, context);
         }
@@ -33,9 +37,9 @@ impl<DB: Database> Inspector<DB> for ChainInspector {
     }
 
     #[inline]
-    fn log(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>, log: &Log) {
+    fn log(&mut self, interp: &mut Interpreter, context: &mut CTX, log: Log) {
         if let Some(ins) = self.log_inspector.as_mut() {
-            ins.log(interp, context, log);
+            ins.log(interp, context, log.clone());
         }
         if let Some(ins) = self.bug_inspector.as_mut() {
             ins.log(interp, context, log);
@@ -47,7 +51,7 @@ impl<DB: Database> Inspector<DB> for ChainInspector {
     #[inline]
     fn call(
         &mut self,
-        context: &mut EvmContext<DB>,
+        context: &mut CTX,
         inputs: &mut CallInputs,
     ) -> Option<CallOutcome> {
         if let Some(ins) = self.log_inspector.as_mut() {
@@ -63,25 +67,23 @@ impl<DB: Database> Inspector<DB> for ChainInspector {
     #[inline]
     fn call_end(
         &mut self,
-        context: &mut EvmContext<DB>,
+        context: &mut CTX,
         inputs: &CallInputs,
-        outcome: CallOutcome,
-    ) -> CallOutcome {
-        let mut outcome = outcome;
+        outcome: &mut CallOutcome,
+    ) {
         if let Some(ins) = self.log_inspector.as_mut() {
-            outcome = ins.call_end(context, inputs, outcome);
+            ins.call_end(context, inputs, outcome);
         }
         if let Some(ins) = self.bug_inspector.as_mut() {
-            outcome = ins.call_end(context, inputs, outcome);
+            ins.call_end(context, inputs, outcome);
         }
-        outcome
     }
 
     /// Call the inspectors in order, if any of them returns a `Some`, return that value.
     #[inline]
     fn create(
         &mut self,
-        context: &mut EvmContext<DB>,
+        context: &mut CTX,
         inputs: &mut CreateInputs,
     ) -> Option<CreateOutcome> {
         if let Some(ins) = self.log_inspector.as_mut() {
@@ -97,17 +99,15 @@ impl<DB: Database> Inspector<DB> for ChainInspector {
     #[inline]
     fn create_end(
         &mut self,
-        context: &mut EvmContext<DB>,
+        context: &mut CTX,
         inputs: &CreateInputs,
-        outcome: CreateOutcome,
-    ) -> CreateOutcome {
-        let mut outcome = outcome;
+        outcome: &mut CreateOutcome,
+    ) {
         if let Some(ins) = self.log_inspector.as_mut() {
-            outcome = ins.create_end(context, inputs, outcome);
+            ins.create_end(context, inputs, outcome);
         }
         if let Some(ins) = self.bug_inspector.as_mut() {
-            outcome = ins.create_end(context, inputs, outcome);
+            ins.create_end(context, inputs, outcome);
         }
-        outcome
     }
 }

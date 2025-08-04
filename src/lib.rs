@@ -1,11 +1,15 @@
 use crate::{fork_provider::ForkProvider, response::RevmResult};
 use ::revm::{
-    Evm,
-    db::DbAccount,
-    primitives::{
-        AccountInfo, Address, Bytecode, CfgEnv, Env, ExecutionResult, HaltReason, TransactTo,
-        keccak256,
+    MainBuilder,
+    context::{BlockEnv, CfgEnv, Context, TxEnv},
+    context_interface::{
+        JournalTr,
+        result::{ExecutionResult, HaltReason},
     },
+    database::DbAccount,
+    database_interface::Database,
+    primitives::{Address, B256, keccak256},
+    state::{AccountInfo, Bytecode},
 };
 use alloy::{providers::ProviderBuilder, transports::http::reqwest::Url};
 use cache::DefaultProviderCache;
@@ -18,10 +22,7 @@ use lazy_static::lazy_static;
 use num_bigint::BigInt;
 use pyo3::prelude::*;
 use response::{Response, SeenPcsMap, WrappedBug, WrappedHeuristics, WrappedMissedBranch};
-use revm::{
-    Database, inspector_handle_register,
-    primitives::{B256, TxEnv},
-};
+use revm::InspectCommitEvm;
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -81,13 +82,26 @@ pub const DEFAULT_BALANCE: U256 =
 
 pub type TinyEvmDb = ForkDB<DefaultProviderCache>;
 
-pub struct TinyEvmContext {}
+pub type TinyEvmJournal = revm::context::Journal<TinyEvmDb>;
+
+pub type TinyEvmContext = revm::context::Context<
+    BlockEnv,
+    TxEnv,
+    CfgEnv,
+    TinyEvmDb,
+    TinyEvmJournal,
+    (),
+>;
+
+pub type TinyEvmExecutor = revm::handler::MainnetEvm<TinyEvmContext, ChainInspector>;
+
+pub struct TinyEvmContextStruct {}
 
 /// TinyEVM is a Python wrapper for REVM
 #[pyclass(unsendable)]
 pub struct TinyEVM {
     /// REVM instance
-    pub exe: Option<Evm<'static, ChainInspector, TinyEvmDb>>,
+    pub exe: Option<TinyEvmExecutor>,
     pub owner: Address,
     /// Default gas limit for each transaction
     #[pyo3(get, set)]
@@ -126,20 +140,20 @@ pub fn enable_tracing() -> Result<()> {
 
 // Implementations for use in Rust
 impl TinyEVM {
-    pub fn exe_mut(&mut self) -> &mut Evm<'static, ChainInspector, TinyEvmDb> {
+    pub fn exe_mut(&mut self) -> &mut TinyEvmExecutor {
         self.exe.as_mut().unwrap()
     }
 
     pub fn tx_mut(&mut self) -> &mut TxEnv {
-        self.exe_mut().tx_mut()
+        &mut self.exe_mut().ctx.tx
     }
 
     fn db(&self) -> &ForkDB<DefaultProviderCache> {
-        &self.exe.as_ref().unwrap().context.evm.db
+        self.exe.as_ref().unwrap().ctx.journaled_state.db()
     }
 
     fn db_mut(&mut self) -> &mut ForkDB<DefaultProviderCache> {
-        &mut self.exe.as_mut().unwrap().context.evm.db
+        self.exe.as_mut().unwrap().ctx.journaled_state.db_mut()
     }
 
     pub fn instrument_config_mut(&mut self) -> &mut InstrumentConfig {
@@ -149,8 +163,7 @@ impl TinyEVM {
         self.exe
             .as_ref()
             .unwrap()
-            .context
-            .external
+            .inspector
             .log_inspector
             .as_ref()
             .unwrap()
@@ -160,8 +173,7 @@ impl TinyEVM {
         self.exe
             .as_mut()
             .unwrap()
-            .context
-            .external
+            .inspector
             .log_inspector
             .as_mut()
             .unwrap()
@@ -171,8 +183,7 @@ impl TinyEVM {
         self.exe
             .as_ref()
             .unwrap()
-            .context
-            .external
+            .inspector
             .bug_inspector
             .as_ref()
             .unwrap()
@@ -182,8 +193,7 @@ impl TinyEVM {
         self.exe
             .as_mut()
             .unwrap()
-            .context
-            .external
+            .inspector
             .bug_inspector
             .as_mut()
             .unwrap()
@@ -212,7 +222,7 @@ impl TinyEVM {
 
     /// Set account balance, if the account does not exist, will create one
     pub fn set_account_balance(&mut self, address: Address, balance: U256) -> Result<()> {
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
+        let db = self.exe.as_mut().unwrap().ctx.journaled_state.db_mut();
         if let Some(account) = db.accounts.get_mut(&address) {
             account.info.balance = balance;
         } else {
@@ -224,7 +234,7 @@ impl TinyEVM {
 
     /// Reset the account info
     pub fn reset_account(&mut self, addr: Address) -> Result<()> {
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
+        let db = self.exe.as_mut().unwrap().ctx.journaled_state.db_mut();
 
         if db.accounts.get(&addr).is_some() {
             let account = AccountInfo {
@@ -239,7 +249,7 @@ impl TinyEVM {
 
     /// Reset an account storage keeping the account info
     pub fn reset_storage(&mut self, addr: Address) -> Result<()> {
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
+        let db = self.exe.as_mut().unwrap().ctx.journaled_state.db_mut();
         db.replace_account_storage(addr, Default::default())?;
         Ok(())
     }
@@ -247,7 +257,7 @@ impl TinyEVM {
     /// Reset both the accoun info and storage by address
     pub fn nuke_account(&mut self, addr: Address) -> Result<()> {
         info!("Nuke account: {:?}", addr);
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
+        let db = self.exe.as_mut().unwrap().ctx.journaled_state.db_mut();
         db.accounts.remove(&addr);
 
         let managed_addresses = &mut self.bug_inspector_mut().managed_addresses;
@@ -279,26 +289,22 @@ impl TinyEVM {
 
         self.bug_inspector_mut().pcs_by_address.clear(); // If don't want to trace the deploy PCs
 
+        // Get the current nonce for the owner from the database
+        let nonce = self.db_mut()
+            .basic(owner)
+            .ok()
+            .flatten()
+            .map_or(0, |a| a.nonce);
+
         {
-            let tx = self.exe.as_mut().unwrap().tx_mut();
+            let tx = &mut self.exe.as_mut().unwrap().ctx.tx;
             tx.caller = owner;
-            tx.transact_to = TransactTo::Create;
+            tx.kind = revm::primitives::TxKind::Create;
             tx.data = contract_bytecode.clone().into();
             tx.value = value;
             tx.gas_limit = tx_gas_limit.unwrap_or(self.tx_gas_limit);
+            tx.nonce = nonce;
         }
-
-        // todo this is read from global state, might be wrong
-        let nonce = self
-            .exe
-            .as_ref()
-            .unwrap()
-            .context
-            .evm
-            .db
-            .accounts
-            .get(&owner)
-            .map_or(0, |a| a.info.nonce);
         let address = owner.create(nonce);
 
         debug!("Calculated addresss: {:?}", address);
@@ -308,7 +314,8 @@ impl TinyEVM {
                 .create_address_overrides
                 .insert(address, force_address);
         }
-        let result = self.exe.as_mut().unwrap().transact_commit();
+        let tx = self.exe.as_ref().unwrap().ctx.tx.clone();
+        let result = self.exe.as_mut().unwrap().inspect_tx_commit(tx);
 
         trace!("deploy result: {:?}", result);
 
@@ -353,7 +360,7 @@ impl TinyEVM {
         trace!("deploy result: {:?}", result);
 
         let revm_result = RevmResult {
-            result: result.map_err(|e| eyre!(e)),
+            result: result.map_err(|e| eyre!("{:?}", e)),
             bug_data,
             heuristics,
             seen_pcs,
@@ -379,17 +386,26 @@ impl TinyEVM {
         self.clear_instrumentation();
         CALL_DEPTH.get_or_default().set(0);
 
+        // Get the current nonce for the sender from the database
+        let nonce = self.db_mut()
+            .basic(sender)
+            .ok()
+            .flatten()
+            .map_or(0, |a| a.nonce);
+
         {
             let tx_gas_limit = tx_gas_limit.unwrap_or(self.tx_gas_limit);
             let tx = self.tx_mut();
             tx.caller = sender;
-            tx.transact_to = TransactTo::Call(contract);
+            tx.kind = revm::primitives::TxKind::Call(contract);
             tx.data = data.into();
             tx.value = value;
             tx.gas_limit = tx_gas_limit;
+            tx.nonce = nonce;
         }
 
-        let result = self.exe_mut().transact_commit();
+        let tx = self.exe.as_ref().unwrap().ctx.tx.clone();
+        let result = self.exe_mut().inspect_tx_commit(tx);
 
         let addresses = self.created_addresses().clone();
         info!(
@@ -418,7 +434,7 @@ impl TinyEVM {
         let traces = log_inspector.traces.clone();
 
         let revm_result = RevmResult {
-            result: result.map_err(|e| eyre!(e)),
+            result: result.map_err(|e| eyre!("{:?}", e)),
             bug_data,
             heuristics,
             seen_pcs,
@@ -492,7 +508,7 @@ impl TinyEVM {
         let accounts = &db.accounts;
         let account = accounts
             .get(&addr)
-            .context(format!("Failed to get account for address: {:?}", addr))?;
+            .context(format!("Failed to get account for address: {addr:?}"))?;
         account
             .storage
             .get(&index)
@@ -513,7 +529,7 @@ impl TinyEVM {
 
     /// Clone account from one address to another. If `delete` is true, the original account will be deleted.
     pub fn clone_account(&mut self, from: Address, to: Address, delete: bool) -> Result<()> {
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
+        let db = self.exe.as_mut().unwrap().ctx.journaled_state.db_mut();
         let accounts = &db.accounts;
         let account = accounts.get(&from).cloned();
 
@@ -547,31 +563,29 @@ impl TinyEVM {
             Some(ref url) => {
                 info!("Starting EVM from fork {} and block: {:?}", url, block_id);
                 let runtime = Runtime::new().expect("Create runtime failed");
-                let provider = ProviderBuilder::new().on_http(Url::parse(url)?);
+                let provider = ProviderBuilder::new().connect_http(Url::parse(url)?);
                 let provider = ForkProvider::new(provider, runtime);
                 ForkDB::create_with_provider(Some(provider), block_id)
             }
             None => ForkDB::create(),
         };
 
-        let mut env = Env {
-            cfg: cfg_env,
-            ..Default::default()
-        };
+        let mut block_env = BlockEnv::default();
+        let tx_env = TxEnv::default();
 
         if fork_enabled {
             let block = db.get_fork_block().unwrap();
             let block_number = block.header.number;
             info!("Using block number: {:?}", block_number);
 
-            env.block.number = U256::from(block_number);
-            env.block.timestamp = U256::from(block.header.timestamp);
-            env.block.difficulty = block.header.difficulty;
-            env.block.gas_limit = U256::from(block.header.gas_limit);
-            env.block.coinbase = block.header.beneficiary;
-            env.cfg.disable_base_fee = true;
+            block_env.number = U256::from(block_number);
+            block_env.timestamp = U256::from(block.header.timestamp);
+            block_env.difficulty = block.header.difficulty;
+            block_env.gas_limit = block.header.gas_limit;
+            block_env.beneficiary = block.header.beneficiary;
+            cfg_env.disable_base_fee = true;
             if let Some(base_fee) = block.header.base_fee_per_gas {
-                env.block.basefee = U256::from(base_fee);
+                block_env.basefee = base_fee;
             }
         }
 
@@ -597,12 +611,19 @@ impl TinyEVM {
             bug_inspector: Some(bug_inspector),
         };
 
-        let exe = Evm::builder()
-            .modify_env(|e| *e = Box::new(env.clone()))
-            .with_db(db.clone())
-            .with_external_context(inspector)
-            .append_handler_register(inspector_handle_register)
-            .build();
+        // Create context with separate environments
+        let ctx = Context {
+            block: block_env,
+            tx: tx_env,
+            cfg: cfg_env,
+            journaled_state: TinyEvmJournal::new(db.clone()),
+            chain: (),
+            local: Default::default(),
+            error: Ok(()),
+        };
+
+        // Build mainnet EVM with inspector
+        let exe = ctx.build_mainnet_with_inspector(inspector);
         let tinyevm = Self {
             exe: Some(exe),
             owner,
@@ -634,15 +655,15 @@ impl TinyEVM {
 
     /// Get addresses loaded remotely as string
     pub fn get_forked_addresses(&self) -> Result<Vec<String>> {
-        let db = &self.exe.as_ref().unwrap().context.evm.db;
+        let db = self.exe.as_ref().unwrap().ctx.journaled_state.db();
         let addresses = &db.remote_addresses;
-        addresses.keys().map(|a| Ok(format!("0x{:x}", a))).collect()
+        addresses.keys().map(|a| Ok(format!("0x{a:x}"))).collect()
     }
 
     /// Get remotely loaded slot indices by address
     pub fn get_forked_slots(&self, address: String) -> Result<Vec<BigInt>> {
         let address = Address::from_str(&address)?;
-        let db = &self.exe.as_ref().unwrap().context.evm.db;
+        let db = self.exe.as_ref().unwrap().ctx.journaled_state.db();
         db.remote_addresses.get(&address).map_or_else(
             || Ok(vec![]),
             |slots| Ok(slots.iter().map(ruint_u256_to_bigint).collect::<Vec<_>>()),
@@ -651,7 +672,7 @@ impl TinyEVM {
 
     /// Toggle for enable mode, only makes sense when fork_url is set
     pub fn toggle_enable_fork(&mut self, enabled: bool) {
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
+        let db = self.exe.as_mut().unwrap().ctx.journaled_state.db_mut();
         db.fork_enabled = enabled;
     }
 
@@ -663,7 +684,7 @@ impl TinyEVM {
 
     /// Get the current fork toggle status
     pub fn is_fork_enabled(&self) -> bool {
-        let db = &self.exe.as_ref().unwrap().context.evm.db;
+        let db = self.exe.as_ref().unwrap().ctx.journaled_state.db();
         db.fork_enabled
     }
 
@@ -908,15 +929,15 @@ impl TinyEVM {
 
         let r = match field.as_str() {
             // NOTE returning BigInt instead of hex string might be a better idea
-            GAS_PRICE => hex2str!(exe.tx().gas_price),
-            CHAIN_ID => hex2str!(exe.cfg().chain_id),
-            BLOCK_NUMBER => hex2str!(exe.block().number),
-            BLOCK_TIMESTAMP => hex2str!(exe.block().timestamp),
-            BLOCK_DIFFICULTY => hex2str!(exe.block().difficulty),
-            BLOCK_GAS_LIMIT => hex2str!(exe.block().gas_limit),
-            BLOCK_BASE_FEE_PER_GAS => hex2str!(exe.block().basefee),
-            ORIGIN => format!("0x{}", hex::encode(exe.tx().caller)),
-            BLOCK_COINBASE => format!("0x{}", hex::encode(exe.block().coinbase)),
+            GAS_PRICE => hex2str!(exe.ctx.tx.gas_price),
+            CHAIN_ID => hex2str!(exe.ctx.cfg.chain_id),
+            BLOCK_NUMBER => hex2str!(exe.ctx.block.number),
+            BLOCK_TIMESTAMP => hex2str!(exe.ctx.block.timestamp),
+            BLOCK_DIFFICULTY => hex2str!(exe.ctx.block.difficulty),
+            BLOCK_GAS_LIMIT => hex2str!(exe.ctx.block.gas_limit),
+            BLOCK_BASE_FEE_PER_GAS => hex2str!(exe.ctx.block.basefee),
+            ORIGIN => format!("0x{}", hex::encode(exe.ctx.tx.caller)),
+            BLOCK_COINBASE => format!("0x{}", hex::encode(exe.ctx.block.beneficiary)),
             _ => return Err(eyre!("Unknown field: {}", &field)),
         };
         Ok(r)
@@ -968,23 +989,33 @@ impl TinyEVM {
 
         macro_rules! set_env_field {
             ($field:ident, $value:expr, $env:ident, $method:ident) => {{
-                let env = &mut self.exe.as_mut().unwrap().$env();
-                env.$field = $method($value)?;
+                let ctx = &mut self.exe.as_mut().unwrap().ctx;
+                ctx.$env.$field = $method($value)?;
             }};
         }
         match field {
             CHAIN_ID => {
-                let cfg = &mut self.exe.as_mut().unwrap().cfg_mut();
-                cfg.chain_id = u64::from_str_radix(value, 16)?;
+                let ctx = &mut self.exe.as_mut().unwrap().ctx;
+                ctx.cfg.chain_id = u64::from_str_radix(value, 16)?;
             }
-            GAS_PRICE => set_env_field!(gas_price, value, tx_mut, to_u256),
-            ORIGIN => set_env_field!(caller, value, tx_mut, to_address),
-            BLOCK_NUMBER => set_env_field!(number, value, block_mut, to_u256),
-            BLOCK_TIMESTAMP => set_env_field!(timestamp, value, block_mut, to_u256),
-            BLOCK_DIFFICULTY => set_env_field!(difficulty, value, block_mut, to_u256),
-            BLOCK_GAS_LIMIT => set_env_field!(gas_limit, value, block_mut, to_u256),
-            BLOCK_BASE_FEE_PER_GAS => set_env_field!(basefee, value, block_mut, to_u256),
-            BLOCK_COINBASE => set_env_field!(coinbase, value, block_mut, to_address),
+            GAS_PRICE => {
+                let ctx = &mut self.exe.as_mut().unwrap().ctx;
+                let price = U256::from_str_radix(value, 16)?;
+                ctx.tx.gas_price = price.to::<u128>();
+            }
+            ORIGIN => set_env_field!(caller, value, tx, to_address),
+            BLOCK_NUMBER => set_env_field!(number, value, block, to_u256),
+            BLOCK_TIMESTAMP => set_env_field!(timestamp, value, block, to_u256),
+            BLOCK_DIFFICULTY => set_env_field!(difficulty, value, block, to_u256),
+            BLOCK_GAS_LIMIT => {
+                let ctx = &mut self.exe.as_mut().unwrap().ctx;
+                ctx.block.gas_limit = u64::from_str_radix(value, 16)?;
+            }
+            BLOCK_BASE_FEE_PER_GAS => {
+                let ctx = &mut self.exe.as_mut().unwrap().ctx;
+                ctx.block.basefee = u64::from_str_radix(value, 16)?;
+            }
+            BLOCK_COINBASE => set_env_field!(beneficiary, value, block, to_address),
             _ => return Err(eyre!("Unknown field: {}", &field))?,
         }
 
@@ -1073,7 +1104,7 @@ impl TinyEVM {
         addr: String, // address as H160, encoded as hex
     ) -> Result<()> {
         let addr = Address::from_str(&addr)?;
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
+        let db = self.exe.as_mut().unwrap().ctx.journaled_state.db_mut();
         db.accounts.remove(&addr);
         Ok(())
     }
@@ -1097,7 +1128,7 @@ impl TinyEVM {
         let from = Address::from_str(&from)?;
         let to = Address::from_str(&to)?;
 
-        let db = &mut self.exe.as_mut().unwrap().context.evm.db;
+        let db = self.exe.as_mut().unwrap().ctx.journaled_state.db_mut();
 
         let account = self
             .snapshots
